@@ -5,7 +5,7 @@ from threading import Thread
 from multiprocessing import Queue
 
 
-class VideoStream():
+class CameraStream():
     def __init__(self):
         # Pick camera source
         camera = 0
@@ -24,6 +24,10 @@ class VideoStream():
             'timestamp': [],
             'frame': []
         }
+
+        # Flush initial two black frames
+        self.video_stream.read()
+        self.video_stream.read()
 
         while(self.video_stream.isOpened()):
             # print(f"Video timestamp counter: {time.strftime('%Y:%m:%d %H:%M:%S')}", end='\r')
@@ -56,25 +60,28 @@ class VideoStream():
 
 
 def process_frame_buffer(next_clip):
-    # single_frame = next_clip['frame'][-1]
-    # cv2.imwrite('output/frame.jpg', single_frame)
+    single_frame = next_clip['frame'][0]
+    cv2.imwrite('output/frame.jpg', single_frame)
 
     # Detect average brightness
     next_clip['brightness'] = []
+    black_frame_detected = False
 
     for frame in next_clip['frame']:
         average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
         next_clip['brightness'].append(average_brightness)
+        if average_brightness < 10: black_frame_detected = True
 
     print(f"\nTime range: {next_clip['timestamp'][0].split('-')[-1]}-{next_clip['timestamp'][-1].split('-')[-1]}")
     print(f"Average brightness: {np.average(next_clip['brightness']):.2f}")
+    print(f"Black frame detected: {black_frame_detected}")
 
 
 if __name__ == '__main__':
     # Initialise video stream
     print("Initialising video stream capture...")
     clips = Queue()
-    video = VideoStream()
+    video = CameraStream()
 
     # Launch video stream in its own thread
     video_thread = Thread(target=video.launch, args=(clips,))
