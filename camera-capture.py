@@ -1,12 +1,15 @@
 import cv2
-import datetime
 import math
+import wave
+import time
+import pyaudio
+import datetime
 import numpy as np
 from threading import Thread
 from collections import deque
 
 
-class CameraStream():
+class VideoStream():
     def __init__(self, camera=0):
         # Define a video capture object
         self.video_stream = cv2.VideoCapture(camera)
@@ -49,6 +52,52 @@ class CameraStream():
         print("\nStream open: ", self.video_stream.isOpened())
 
 
+class AudioStream():
+    def __init__(self):
+        self.format = pyaudio.paInt16
+        self.rate = 44100
+        self.chunk = 1024
+        self.record_time_secs = 6
+        self.output = "recording.wav"
+
+        self.audio_device = 1
+        self.audio = pyaudio.PyAudio()
+        self.audio_channels = self.audio.get_device_info_by_host_api_device_index(0, self.audio_device).get('maxInputChannels')
+
+    def launch(self):
+        "Audio starts being recorded"
+        print(f'     * Audio input device:', self.audio_device)
+        print(f'     * Audio input channels:', self.audio_channels, end='\n\n')
+
+        # start Recording
+        stream = self.audio.open(
+            format=self.format, rate=self.rate, input=True,
+            input_device_index=self.audio_device, channels=self.audio_channels,
+            frames_per_buffer=self.chunk
+        )
+
+        print("recording...")
+        frames = []
+
+        for _ in range(0, int(self.rate / self.chunk * self.record_time_secs)):
+            data = stream.read(self.chunk)
+            frames.append(data)
+
+        print("finished recording")
+
+        # stop Recording
+        stream.stop_stream()
+        stream.close()
+        self.audio.terminate()
+
+        waveFile = wave.open(self.output, 'wb')
+        waveFile.setnchannels(self.audio_device)
+        waveFile.setsampwidth(self.audio.get_sample_size(self.format))
+        waveFile.setframerate(self.rate)
+        waveFile.writeframes(b''.join(frames))
+        waveFile.close()
+
+
 def video_processing(video_frames, frames_per_second, buffer_length_secs=10, overlap_length_secs=2):
     # Processing frame buffer parameters
     buffer_length_frames = math.ceil(frames_per_second * buffer_length_secs)
@@ -67,7 +116,9 @@ def video_processing(video_frames, frames_per_second, buffer_length_secs=10, ove
 
         except KeyboardInterrupt:
             video.kill()
+            audio_thread.join()
             video_thread.join()
+            processing_thread.join()
             break
 
 
@@ -85,7 +136,7 @@ def collate_frames(frame_queue, frames_per_buffer, overlap_frames, index=0):
 
     print(f"     * Segment frame count : {len(frame_buffer)}")
     print(f"     * Segment time range  : {frame_buffer[0][0]} => {frame_buffer[-1][0]}")
-    print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
+    print(f"     * self.output queue length : {len(frame_queue)}", end='\n\n')
 
     return frame_buffer
 
@@ -109,13 +160,14 @@ if __name__ == '__main__':
     # Switch between setup video stream & processing stream
     camera_device = 0
     processing_module = True
-    video = CameraStream(camera=camera_device)
+    audio = AudioStream()
+    video = VideoStream(camera=camera_device)
     video_fps = video.frame_rate
 
     print(f"\n * Parameters:")
     print(f"     * Process video (no display) : {processing_module}")
     print(f"     * Camera capture source      : {camera_device}")
-    print(f"     * Capture frame rate         : {video_fps}")
+    print(f"     * Capture frame self.rate         : {video_fps}")
 
     if not processing_module:
         # Set up stream to show content but do no processing
@@ -125,9 +177,11 @@ if __name__ == '__main__':
         # Initialise video stream
         video_frame_queue = deque()
 
-        # Set up and launch video stream thread and processing thread
+        # Set up and launch audio-video stream thread and processing thread
+        audio_thread = Thread(target=audio.launch, args=())
         video_thread = Thread(target=video.launch, args=(video_frame_queue,))
         processing_thread = Thread(target=video_processing, args=(video_frame_queue, video_fps,))
 
+        audio_thread.start()
         video_thread.start()
         processing_thread.start()
