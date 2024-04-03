@@ -1,3 +1,5 @@
 opencv-python
 pyaudio
 numpy
+sounddevice
+matplotlib
