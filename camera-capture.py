@@ -1,8 +1,6 @@
 import datetime
 import math
-import time
 import signal
-import sys
 from collections import deque
 from threading import Thread
 import matplotlib.pyplot as plt
@@ -16,7 +14,8 @@ import sounddevice
 class VideoStream():
     def __init__(self, device=0):
         # Define a video capture object
-        self.video_stream = cv2.VideoCapture(device)
+        self.video_device = device
+        self.video_stream = cv2.VideoCapture(self.video_device)
         self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
         self.stream_open = False
 
@@ -96,91 +95,98 @@ class AudioStream():
         self.stream_open = False
 
 
-def av_processing(audio_module, video_module,
-                  audio_frames, video_frames, video_fps,
-                  audio_buffer_len_f=44100, audio_overlap_len_f=4410,
-                  video_buffer_len_s=10, video_overlap_len_s=2):
+class AudioVisualProcessor():
+    def __init__(self, video_fps=30, audio_fps=44100,
+                 audio_buffer_len_s=10, audio_overlap_len_s=2,
+                 video_buffer_len_s=10, video_overlap_len_s=2):
 
-    # Processing frame buffer parameters
-    video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
-    video_overlap_len_f = math.ceil(video_fps * video_overlap_len_s)
+        self.video_fps = video_fps
+        self.audio_fps = audio_fps
+        self.audio_segment_index = 0
+        self.video_segment_index = 0
 
-    print(f"     * Audio segment size         : {audio_buffer_len_f}")
-    print(f"     * Audio overlap size         : {audio_overlap_len_f}")
-    print(f"     * Video frame rate           : {video_fps}")
-    print(f"     * Video segment size         : {video_buffer_len_f}")
-    print(f"     * Video overlap size         : {video_overlap_len_f}", end='\n\n')
+        self.audio_buffer_len_f = math.ceil(audio_fps * audio_buffer_len_s)
+        self.audio_overlap_len_f = math.ceil(audio_fps * audio_overlap_len_s)
+        self.video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
+        self.video_overlap_len_f = math.ceil(video_fps * video_overlap_len_s)
 
-    audio_segment_index = 0
-    video_segment_index = 0
+    def process(self, audio_module, video_module, audio_frames, video_frames):
+        print(f"     * Audio segment size         : {self.audio_buffer_len_f}")
+        print(f"     * Audio overlap size         : {self.audio_overlap_len_f}")
+        print(f"     * Video capture source       : {video_module.video_device}")
+        print(f"     * Video frame rate           : {self.video_fps}")
+        print(f"     * Video segment size         : {self.video_buffer_len_f}")
+        print(f"     * Video overlap size         : {self.video_overlap_len_f}", end='\n\n')
 
-    while True:
-        # Audio processing module
-        if len(audio_frames) >= audio_buffer_len_f:
-            audio_segment = collate_frames(
-                audio_frames, audio_buffer_len_f, audio_overlap_len_f,
-                index=audio_segment_index, av_type='audio')
+        while (audio_module.stream_open and video_module.stream_open) or \
+            (len(audio_frames) >= self.audio_buffer_len_f) or \
+            (len(video_frames) >= self.video_buffer_len_f):
 
-            audio_detection(audio_segment, audio_segment_index)
-            audio_segment_index += 1
+            # Audio processing module
+            if len(audio_frames) >= self.audio_buffer_len_f:
+                audio_segment = self.collate_frames(audio_frames, av_type='audio')
+                self.audio_detection(audio_segment)
+                self.audio_segment_index += 1
 
-        # Video processing module
-        if len(video_frames) >= video_buffer_len_f:
-            video_segment = collate_frames(
-                video_frames, video_buffer_len_f, video_overlap_len_f,
-                index=video_segment_index, av_type='video')
+            # Video processing module
+            if len(video_frames) >= self.video_buffer_len_f:
+                video_segment = self.collate_frames(video_frames, av_type='video')
+                self.video_detection(video_segment)
+                self.video_segment_index += 1
 
-            video_detection(video_segment, video_segment_index)
-            video_segment_index += 1
+        print(f"\n\nProcessing module ended.")
+        print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video")
 
-        if not audio_module.stream_open and not video_module.stream_open and len(audio_frames) < audio_buffer_len_f and len(video_frames) < video_buffer_len_f:
-            print(f"\nExiting processing module. {len(audio_frames)} audio and {len(video_frames)} video frames remain unprocessed.")
-            break
+    def collate_frames(self, frame_queue, av_type='audio'):
+        if av_type == 'audio':
+            core_size = self.audio_buffer_len_f - self.audio_overlap_len_f
+            overlap_size = self.audio_overlap_len_f
+            index = self.audio_segment_index
+        else:
+            core_size = self.video_buffer_len_f - self.video_overlap_len_f
+            overlap_size = self.video_overlap_len_f
+            index = self.video_segment_index
 
+        print(f"\n\n * New {av_type} segment ({index}):")
+        print(f"     * Input queue length  : {len(frame_queue)}")
 
-def collate_frames(frame_queue, frames_per_buffer, overlap_frames, index=0, av_type='audio'):
-    print(f"\n\n * New {av_type} segment ({index}):")
-    print(f"     * Input queue length  : {len(frame_queue)}")
+        # Add main frames in video segment to buffer
+        frame_buffer = []
+        for _ in range(core_size):
+            frame_buffer.append(frame_queue.popleft())
 
-    # Add main frames in video segment to buffer
-    frame_buffer = []
-    for _ in range(frames_per_buffer - overlap_frames):
-        frame_buffer.append(frame_queue.popleft())
+        # Add overlap frames to buffer
+        frame_buffer.extend([frame_queue[i] for i in range(overlap_size)])
 
-    # Add overlap frames to buffer
-    frame_buffer.extend([frame_queue[i] for i in range(overlap_frames)])
+        print(f"     * Segment frame count : {len(frame_buffer)}")
+        print(f"     * Segment time range  : {frame_buffer[0][0]} => {frame_buffer[-1][0]}")
+        print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
 
-    print(f"     * Segment frame count : {len(frame_buffer)}")
-    print(f"     * Segment time range  : {frame_buffer[0][0]} => {frame_buffer[-1][0]}")
-    print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
+        return frame_buffer
 
-    return frame_buffer
+    def audio_detection(self, audio_content):
+        # fig = plt.figure()
+        # s = fig.add_subplot(111)
+        amplitude = np.frombuffer(b''.join([x[1] for x in audio_content]), np.int16)
+        # s.plot(amplitude)
+        # fig.savefig('audio.png')
 
+        print(f"\n\n * Audio detection ({self.audio_segment_index}):")
+        print(f"     * Audio amplitudes    : {amplitude}")
 
-def audio_detection(audio_content, index=0):
-    # fig = plt.figure()
-    # s = fig.add_subplot(111)
-    amplitude = np.frombuffer(b''.join([x[1] for x in audio_content]), np.int16)
-    # s.plot(amplitude)
-    # fig.savefig('audio.png')
+    def video_detection(self, video_content):
+        # Detect average brightness
+        brightness = []
+        black_frame_detected = False
 
-    print(f"\n\n * Audio detection ({index}):")
-    print(f"     * Audio amplitudes    : {amplitude}")
+        for time, frame in video_content:
+            average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
+            brightness.append(average_brightness)
+            if average_brightness < 10: black_frame_detected = True
 
-
-def video_detection(video_content, index=0):
-    # Detect average brightness
-    brightness = []
-    black_frame_detected = False
-
-    for time, frame in video_content:
-        average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
-        brightness.append(average_brightness)
-        if average_brightness < 10: black_frame_detected = True
-
-    print(f"\n\n * Video detection ({index}):")
-    print(f"     * Average brightness  : {np.average(brightness):.2f}")
-    print(f"     * Black frame detected: {black_frame_detected}", end='')
+        print(f"\n\n * Video detection ({self.video_segment_index}):")
+        print(f"     * Average brightness  : {np.average(brightness):.2f}")
+        print(f"     * Black frame detected: {black_frame_detected}", end='')
 
 
 def signal_handler(sig, frame):
@@ -201,7 +207,6 @@ if __name__ == '__main__':
     print("\nAudio devices available: \n", sounddevice.query_devices())
     print(f"\n * Parameters:")
     print(f"     * Setup mode (no processing) : {setup_mode_only}")
-    print(f"     * Video capture source       : {video_device}")
 
     # Set up audio and video streams
     audio = AudioStream(device=audio_device)
@@ -223,4 +228,5 @@ if __name__ == '__main__':
         audio_thread.start()
         video_thread.start()
 
-        av_processing(audio, video, audio_frame_queue, video_frame_queue, video.frame_rate)
+        processor = AudioVisualProcessor(video_fps=video.frame_rate)
+        processor.process(audio, video, audio_frame_queue, video_frame_queue)
