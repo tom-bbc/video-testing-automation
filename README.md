@@ -10,4 +10,6 @@ pip install -e ExplainableVQA/open_clip
 
 sed -i "" "4s/decord/eva-decord/" ExplainableVQA/DOVER/requirements.txt
 pip install -e ExplainableVQA/DOVER
+mkdir ExplainableVQA/DOVER/pretrained_weights
+wget https://github.com/VQAssessment/DOVER/releases/download/v0.1.0/DOVER.pth -P ExplainableVQA/DOVER/pretrained_weights/
 ```

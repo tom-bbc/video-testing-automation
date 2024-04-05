@@ -10,7 +10,10 @@ import pyaudio
 import sounddevice
 
 from essentia_audio_detection import AudioDetector
+from maxvqa_video_detection import VideoDetector
 
+
+Object = lambda **kwargs: type("Object", (), kwargs)
 
 class VideoStream():
     def __init__(self, device=0):
@@ -28,7 +31,7 @@ class VideoStream():
                 _, frame = self.video_stream.read()
                 timestamp = datetime.datetime.now()
                 cv2.imshow('Video Stream', frame)
-                print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
+                # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
                 # esc to quit
                 if cv2.waitKey(1) == 27:
@@ -45,6 +48,7 @@ class VideoStream():
                 # Capture the video frame by frame
                 _, frame = self.video_stream.read()
                 timestamp = datetime.datetime.now()
+                frame = cv2.resize(frame, (250, 250))
                 frame_queue.append((timestamp, frame))
                 # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
@@ -113,7 +117,9 @@ class AudioVisualProcessor():
 
         self.detector = AudioDetector()
 
-    def process(self, audio_module, video_module, audio_frames, video_frames):
+    def process(self,
+                audio_module=Object(stream_open=False), audio_frames=[],
+                video_module=Object(stream_open=False, video_device=None), video_frames=[]):
         print(f"     * Audio segment size         : {self.audio_buffer_len_f}")
         print(f"     * Audio overlap size         : {self.audio_overlap_len_f}")
         print(f"     * Video capture source       : {video_module.video_device}")
@@ -123,7 +129,7 @@ class AudioVisualProcessor():
 
         print(f"Start of audio-visual processing")
 
-        while (audio_module.stream_open and video_module.stream_open) or \
+        while (audio_module.stream_open or video_module.stream_open) or \
             (len(audio_frames) >= self.audio_buffer_len_f) or \
             (len(video_frames) >= self.video_buffer_len_f):
 
@@ -141,10 +147,13 @@ class AudioVisualProcessor():
                 self.video_segment_index += 1
 
         # Save all detection timestamps to CSV database
-        detected_gap_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.gaps])
-        detected_click_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.clicks])
-        np.savetxt("output/detected_gaps.csv", detected_gap_timestamps, delimiter=",", fmt='%s', header='Timestamp')
-        np.savetxt("output/detected_clicks.csv", detected_click_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+        if len(self.detector.gaps) > 0:
+            detected_gap_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.gaps])
+            np.savetxt("output/detected_gaps.csv", detected_gap_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+
+        if len(self.detector.clicks) > 0:
+            detected_click_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.clicks])
+            np.savetxt("output/detected_clicks.csv", detected_click_timestamps, delimiter=",", fmt='%s', header='Timestamp')
 
         print(f"\nProcessing module ended.")
         print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
@@ -201,7 +210,7 @@ class AudioVisualProcessor():
 
         print(f" * Audio detection ({self.audio_segment_index}):")
         print(f"     * Average amplitude   : {np.average(np.abs(audio_y)):.2f}")
-        print(f"     * Detected gap times  : {[t.strftime('%H:%M:%S.%f') for t in detected_audio_gaps]}")
+        print(f"     * Detected gap times  : {[(s.strftime('%H:%M:%S.%f'), e.strftime('%H:%M:%S.%f')) for s, e in detected_audio_gaps]}")
         print(f"     * Detected click times: {[t.strftime('%H:%M:%S.%f') for t in detected_audio_clicks]}")
 
         if plot:
@@ -225,6 +234,10 @@ class AudioVisualProcessor():
         # Detect average brightness
         brightness = []
         black_frame_detected = False
+
+        # detector = VideoDetector()
+        # print("Video detector initialised. Starting file processing.")
+        # detector.process(video_content)
 
         for time, frame in video_content:
             average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
@@ -255,12 +268,14 @@ class AudioVisualProcessor():
 
 def signal_handler(sig, frame):
     print("\nCtrl+C detected. Stopping all AV threads.")
-    audio.kill()
-    video.kill()
+    if audio_on: audio.kill()
+    if video_on: video.kill()
 
 
 if __name__ == '__main__':
     # Switch between setup video stream & processing stream
+    audio_on = True
+    video_on = True
     setup_mode_only = False
     audio_device = 0
     video_device = 0
@@ -274,24 +289,34 @@ if __name__ == '__main__':
     print(f"     * Setup mode (no processing) : {setup_mode_only}")
 
     # Set up audio and video streams
-    audio = AudioStream(device=audio_device)
-    video = VideoStream(device=video_device)
+    if audio_on: audio = AudioStream(device=audio_device)
+    if video_on: video = VideoStream(device=video_device)
 
-    if setup_mode_only:
+    if setup_mode_only and video_on:
         # Set up stream to show content but do no processing
         print()
         video.launch(display_stream=True)
     else:
-        # Initialise video stream
-        audio_frame_queue = deque()
-        video_frame_queue = deque()
+        # Set up and launch audio-video stream threads
+        if audio_on:
+            audio_frame_queue = deque()
+            audio_thread = Thread(target=audio.launch, args=(audio_frame_queue,))
+            audio_thread.start()
 
-        # Set up and launch audio-video stream thread and processing thread
-        audio_thread = Thread(target=audio.launch, args=(audio_frame_queue,))
-        video_thread = Thread(target=video.launch, args=(video_frame_queue,))
+        if video_on:
+            video_frame_queue = deque()
+            video_thread = Thread(target=video.launch, args=(video_frame_queue,))
+            video_thread.start()
 
-        audio_thread.start()
-        video_thread.start()
-
-        processor = AudioVisualProcessor(video_fps=video.frame_rate)
-        processor.process(audio, video, audio_frame_queue, video_frame_queue)
+        # Initialise and launch AV processing module
+        if audio_on and video_on:
+            processor = AudioVisualProcessor(video_fps=video.frame_rate)
+            processor.process(audio, audio_frame_queue, video, video_frame_queue)
+        elif video_on:
+            processor = AudioVisualProcessor(video_fps=video.frame_rate)
+            processor.process(video_module=video, video_frames=video_frame_queue)
+        elif audio_on:
+            processor = AudioVisualProcessor()
+            processor.process(audio_module=audio, audio_frames=audio_frame_queue)
+        else:
+            exit(0)
