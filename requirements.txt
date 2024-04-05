@@ -3,3 +3,5 @@ pyaudio
 numpy
 sounddevice
 matplotlib
+essentia
+tqdm

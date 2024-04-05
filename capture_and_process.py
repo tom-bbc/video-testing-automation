@@ -1,16 +1,15 @@
-import os
 import datetime
 import math
-import glob
 import signal
 from collections import deque
 from threading import Thread
 import matplotlib.pyplot as plt
-
 import cv2
 import numpy as np
 import pyaudio
 import sounddevice
+
+from essentia_audio_detection import audio_detection as essentia_audio_detection
 
 
 class VideoStream():
@@ -27,9 +26,9 @@ class VideoStream():
         if display_stream:
             while self.video_stream.isOpened():
                 _, frame = self.video_stream.read()
-                timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')
+                timestamp = datetime.datetime.now()
                 cv2.imshow('Video Stream', frame)
-                # print(f"Timestamp counter: {timestamp}", end='\r')
+                print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
                 # esc to quit
                 if cv2.waitKey(1) == 27:
@@ -45,9 +44,9 @@ class VideoStream():
             while self.stream_open:
                 # Capture the video frame by frame
                 _, frame = self.video_stream.read()
-                timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')
+                timestamp = datetime.datetime.now()
                 frame_queue.append((timestamp, frame))
-                print(f"Timestamp counter: {timestamp}", end='\r')
+                # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
         self.video_stream.release()
         cv2.destroyAllWindows()
@@ -83,11 +82,10 @@ class AudioStream():
 
         while self.stream_open:
             frame = stream.read(self.chunk)
-            timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')
+            timestamp = datetime.datetime.now()
 
             frame_queue.append((timestamp, frame))
-            print(f"Timestamp counter: {timestamp}", end='\r')
-            # print(f"Audio frame counter: {len(frame_queue) * self.chunk}", end='\r')
+            # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
         stream.stop_stream()
         stream.close()
@@ -121,6 +119,8 @@ class AudioVisualProcessor():
         print(f"     * Video segment size         : {self.video_buffer_len_f}")
         print(f"     * Video overlap size         : {self.video_overlap_len_f}", end='\n\n')
 
+        print(f"Start of audio-visual processing")
+
         while (audio_module.stream_open and video_module.stream_open) or \
             (len(audio_frames) >= self.audio_buffer_len_f) or \
             (len(video_frames) >= self.video_buffer_len_f):
@@ -149,17 +149,16 @@ class AudioVisualProcessor():
         frame_buffer = []
         for _ in range(self.audio_buffer_len_f - self.audio_overlap_len_f):
             timestamp, frame_bytes = frame_queue.popleft()
-            frame = np.frombuffer(frame_bytes, np.int16)
+            frame = np.frombuffer(frame_bytes, np.int16).astype(np.single)
             frame_buffer.append((timestamp, frame))
 
         # Add overlap frames to buffer
         for i in range(self.audio_overlap_len_f):
             timestamp, frame_bytes = frame_queue[i]
-            frame = np.frombuffer(frame_bytes, np.int16)
+            frame = np.frombuffer(frame_bytes, np.int16).astype(np.single)
             frame_buffer.append((timestamp, frame))
 
-        print(f"     * Segment frame count : {len(frame_buffer)}")
-        print(f"     * Segment time range  : {frame_buffer[0][0]} => {frame_buffer[-1][0]}")
+        print(f"     * Segment time range  : {frame_buffer[0][0].strftime('%H:%M:%S.%f')} => {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
         print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
 
         return frame_buffer
@@ -176,8 +175,7 @@ class AudioVisualProcessor():
         # Add overlap frames to buffer
         frame_buffer.extend([frame_queue[i] for i in range(self.video_overlap_len_f)])
 
-        print(f"     * Segment frame count : {len(frame_buffer)}")
-        print(f"     * Segment time range  : {frame_buffer[0][0]} => {frame_buffer[-1][0]}")
+        print(f"     * Segment time range  : {frame_buffer[0][0].strftime('%H:%M:%S.%f')} => {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
         print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
 
         return frame_buffer
@@ -187,11 +185,16 @@ class AudioVisualProcessor():
         audio_y = []
 
         for time, chunk in audio_content:
-            time_x.extend([time] * len(chunk))
+            time_x.extend([time.strftime('%H:%M:%S.%f')] * len(chunk))
             audio_y.extend(chunk)
 
-        print(f"\n * Audio detection ({self.audio_segment_index}):")
+        audio_y = np.array(audio_y)
+        detected_audio_gaps, detected_audio_clicks = essentia_audio_detection(audio_y, start_time=audio_content[0][0])
+
+        print(f" * Audio detection ({self.audio_segment_index}):")
         print(f"     * Average amplitude   : {np.average(np.abs(audio_y)):.2f}")
+        print(f"     * Detected gap times  : {[t.strftime('%H:%M:%S.%f') for t in detected_audio_gaps]}")
+        print(f"     * Detected click times: {[t.strftime('%H:%M:%S.%f') for t in detected_audio_clicks]}")
 
         if plot:
             plt.rcParams['agg.path.chunksize'] = 20000
@@ -220,7 +223,7 @@ class AudioVisualProcessor():
             brightness.append(average_brightness)
             if average_brightness < 10: black_frame_detected = True
 
-        print(f"\n * Video detection ({self.video_segment_index}):")
+        print(f" * Video detection ({self.video_segment_index}):")
         print(f"     * Average brightness  : {np.average(brightness):.2f}")
         print(f"     * Black frame detected: {black_frame_detected}")
 
@@ -236,7 +239,7 @@ class AudioVisualProcessor():
                 labels=[f[0] for f in video_content[::30]],
                 rotation='vertical'
             )
-            plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].split('.')[0]} => {video_content[-1][0].split('.')[0]})")
+            plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
             fig.savefig(f"output/video-plot-{self.video_segment_index}.png")
 
             print(f"     * Plot generated      : 'video-plot-{self.video_segment_index}.png'")
@@ -257,8 +260,9 @@ if __name__ == '__main__':
     # Set up the signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
 
-    print("\nAudio devices available: \n", sounddevice.query_devices())
-    print(f"\n * Parameters:")
+    print(f"\nInitialising capture and processing modules", end='\n\n')
+    print(f"Audio devices available: \n{sounddevice.query_devices()}", end='\n\n')
+    print(f" * Parameters:")
     print(f"     * Setup mode (no processing) : {setup_mode_only}")
 
     # Set up audio and video streams
