@@ -1,0 +1,3 @@
+[submodule "ExplainableVQA"]
+	path = ExplainableVQA
+	url = git@github.com:tom-bbc/ExplainableVQA.git
