@@ -9,7 +9,7 @@ import numpy as np
 import pyaudio
 import sounddevice
 
-from essentia_audio_detection import audio_detection as essentia_audio_detection
+from essentia_audio_detection import AudioDetector
 
 
 class VideoStream():
@@ -111,6 +111,8 @@ class AudioVisualProcessor():
         self.video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
         self.video_overlap_len_f = math.ceil(video_fps * video_overlap_len_s)
 
+        self.detector = AudioDetector()
+
     def process(self, audio_module, video_module, audio_frames, video_frames):
         print(f"     * Audio segment size         : {self.audio_buffer_len_f}")
         print(f"     * Audio overlap size         : {self.audio_overlap_len_f}")
@@ -138,8 +140,14 @@ class AudioVisualProcessor():
                 self.video_detection(video_segment)
                 self.video_segment_index += 1
 
-        print(f"\n\nProcessing module ended.")
-        print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video")
+        # Save all detection timestamps to CSV database
+        detected_gap_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.gaps])
+        detected_click_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.clicks])
+        np.savetxt("output/detected_gaps.csv", detected_gap_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+        np.savetxt("output/detected_clicks.csv", detected_click_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+
+        print(f"\nProcessing module ended.")
+        print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
 
     def collate_audio_frames(self, frame_queue):
         print(f"\n * New audio segment ({self.audio_segment_index}):")
@@ -185,11 +193,11 @@ class AudioVisualProcessor():
         audio_y = []
 
         for time, chunk in audio_content:
-            time_x.extend([time.strftime('%H:%M:%S.%f')] * len(chunk))
+            time_x.extend([time.strftime('%H:%M:%S.%f')[:-4]] * len(chunk))
             audio_y.extend(chunk)
 
         audio_y = np.array(audio_y)
-        detected_audio_gaps, detected_audio_clicks = essentia_audio_detection(audio_y, start_time=audio_content[0][0])
+        detected_audio_gaps, detected_audio_clicks = self.detector.process(audio_y, start_time=audio_content[0][0])
 
         print(f" * Audio detection ({self.audio_segment_index}):")
         print(f"     * Average amplitude   : {np.average(np.abs(audio_y)):.2f}")
@@ -206,7 +214,7 @@ class AudioVisualProcessor():
             plt.ylabel('Audio Sample')
             plt.xticks(
                 time_x[::41000],
-                rotation='vertical'
+                rotation=-90
             )
             plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].split('.')[0]} => {time_x[-1].split('.')[0]}))")
             fig.savefig(f"output/audio-plot-{self.audio_segment_index}.png")
@@ -236,8 +244,8 @@ class AudioVisualProcessor():
             plt.ylabel('Average Brightness')
             plt.xticks(
                 ticks=range(0, len(video_content), 30),
-                labels=[f[0] for f in video_content[::30]],
-                rotation='vertical'
+                labels=[f[0].strftime('%H:%M:%S.%f')[:-4] for f in video_content[::30]],
+                rotation=-90
             )
             plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
             fig.savefig(f"output/video-plot-{self.video_segment_index}.png")
