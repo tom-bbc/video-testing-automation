@@ -1,0 +1,8 @@
+# conda install pytorch torchvision torchaudio -c pytorch
+scipy
+opencv-python
+eva-decord
+scikit-video
+einops
+torch==1.13
+gradio
