@@ -10,6 +10,7 @@ class AudioDetector():
     def process(self, audio: np.ndarray, start_time=0):
         # Normalise audio to the range [-1, 1]
         normalised_audio = audio / np.max(np.abs(audio))
+        normalised_audio = normalised_audio.astype(np.float32)
 
         gaps = self.audio_gap_detection(normalised_audio, start_time)
         self.gaps.extend(gaps)
@@ -20,7 +21,7 @@ class AudioDetector():
         return gaps, clicks
 
     @staticmethod
-    def audio_gap_detection(audio_content, start_time=0):
+    def audio_gap_detection(audio_values, start_time=0):
         """Detection of gaps (silences) in the audio signal"""
         # Parameters
         frame_size = 1024         # frame size used for the analysis
@@ -36,12 +37,14 @@ class AudioDetector():
             prepowerThreshold=prepower_threshold, silenceThreshold=silence_threshold
         )
 
-        for frame in FrameGenerator(audio_content, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
-            frame_starts, frame_ends = gapDetector(frame)
-            detected_gap_starts.extend(frame_starts)
-            detected_gap_ends.extend(frame_ends)
+        for audio_channel in audio_values:
+            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+                frame_starts, frame_ends = gapDetector(frame)
+                detected_gap_starts.extend(frame_starts)
+                detected_gap_ends.extend(frame_ends)
 
-        gapDetector.reset()
+            gapDetector.reset()
+
         detected_gap_starts = np.unique(np.round(detected_gap_starts, decimals=2))
         detected_gap_ends = np.unique(np.round(detected_gap_ends, decimals=2))
         detected_gaps = zip(detected_gap_starts, detected_gap_ends)
@@ -57,7 +60,7 @@ class AudioDetector():
         return output
 
     @staticmethod
-    def audio_click_detection(audio_content, start_time=0):
+    def audio_click_detection(audio_values, start_time=0):
         """Detection of clicks in the audio signal"""
         # Parameters
         frame_size = 512          # frame size used for the analysis
@@ -67,11 +70,13 @@ class AudioDetector():
         detected_clicks = []
         clickDetector = ClickDetector(frameSize=frame_size, hopSize=hop_size)
 
-        for frame in FrameGenerator(audio_content, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
-            frame_starts, frame_ends = clickDetector(frame)
-            detected_clicks.extend(np.mean([frame_starts, frame_ends], axis=0))
+        for audio_channel in audio_values:
+            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+                frame_starts, frame_ends = clickDetector(frame)
+                detected_clicks.extend(np.mean([frame_starts, frame_ends], axis=0))
 
-        clickDetector.reset()
+            clickDetector.reset()
+
         detected_clicks = np.unique(np.round(detected_clicks, decimals=2))
         output = []
 

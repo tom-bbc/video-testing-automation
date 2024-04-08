@@ -23,7 +23,7 @@ class VideoStream():
         self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
         self.stream_open = False
 
-    def launch(self, frame_queue, display_stream=False):
+    def launch(self, frame_queue=None, display_stream=False):
         self.stream_open = True
         # Show the video stream (no processing)
         if display_stream:
@@ -31,7 +31,7 @@ class VideoStream():
                 _, frame = self.video_stream.read()
                 timestamp = datetime.datetime.now()
                 cv2.imshow('Video Stream', frame)
-                # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
+                print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
                 # esc to quit
                 if cv2.waitKey(1) == 27:
@@ -48,7 +48,6 @@ class VideoStream():
                 # Capture the video frame by frame
                 _, frame = self.video_stream.read()
                 timestamp = datetime.datetime.now()
-                frame = cv2.resize(frame, (250, 250))
                 frame_queue.append((timestamp, frame))
                 # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
@@ -110,6 +109,7 @@ class AudioVisualProcessor():
         self.audio_segment_index = 0
         self.video_segment_index = 0
 
+        self.chunk_size = audio_chunk_size
         self.audio_buffer_len_f = math.ceil(audio_fps * audio_buffer_len_s / audio_chunk_size)
         self.audio_overlap_len_f = math.ceil(audio_fps * audio_overlap_len_s / audio_chunk_size)
         self.video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
@@ -148,7 +148,7 @@ class AudioVisualProcessor():
 
         # Save all detection timestamps to CSV database
         if len(self.detector.gaps) > 0:
-            detected_gap_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.detector.gaps])
+            detected_gap_timestamps = np.array([(s.strftime('%H:%M:%S.%f'), e.strftime('%H:%M:%S.%f')) for s, e in self.detector.gaps])
             np.savetxt("output/detected_gaps.csv", detected_gap_timestamps, delimiter=",", fmt='%s', header='Timestamp')
 
         if len(self.detector.clicks) > 0:
@@ -166,19 +166,36 @@ class AudioVisualProcessor():
         frame_buffer = []
         for _ in range(self.audio_buffer_len_f - self.audio_overlap_len_f):
             timestamp, frame_bytes = frame_queue.popleft()
-            frame = np.frombuffer(frame_bytes, np.int16).astype(np.single)
+            frame = np.frombuffer(frame_bytes, np.int16).astype(np.float32)
+
+            # Format stereo and mono channel audio into shape (1, 1024) or (2, 1024)
+            if len(frame) == 2 * self.chunk_size:
+                channel0 = frame[0::2]
+                channel1 = frame[1::2]
+                frame = np.array([channel0, channel1])
+            else:
+                frame = np.expand_dims(frame, axis=0)
+
             frame_buffer.append((timestamp, frame))
 
         # Add overlap frames to buffer
         for i in range(self.audio_overlap_len_f):
             timestamp, frame_bytes = frame_queue[i]
-            frame = np.frombuffer(frame_bytes, np.int16).astype(np.single)
+            frame = np.frombuffer(frame_bytes, np.int16).astype(np.float32)
+
+            if len(frame) == 2 * self.chunk_size:
+                channel0 = frame[0::2]
+                channel1 = frame[1::2]
+                frame = np.array([channel0, channel1])
+            else:
+                frame = np.expand_dims(frame, axis=0)
+
             frame_buffer.append((timestamp, frame))
 
         print(f"     * Segment time range  : {frame_buffer[0][0].strftime('%H:%M:%S.%f')} => {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
         print(f"     * Output queue length : {len(frame_queue)}", end='\n\n')
 
-        return frame_buffer
+        return np.array(frame_buffer, dtype=object)
 
     def collate_video_frames(self, frame_queue):
         print(f"\n * New video segment ({self.video_segment_index}):")
@@ -198,34 +215,60 @@ class AudioVisualProcessor():
         return frame_buffer
 
     def audio_detection(self, audio_content, plot=True):
+        no_channels = audio_content[0][1].shape[0]
+        audio_y = np.array([[]] * no_channels)
         time_x = []
-        audio_y = []
 
         for time, chunk in audio_content:
-            time_x.extend([time.strftime('%H:%M:%S.%f')[:-4]] * len(chunk))
-            audio_y.extend(chunk)
+            time_x.extend([time] * chunk.shape[1])
+            audio_y = np.append(audio_y, chunk, axis=1)
 
-        audio_y = np.array(audio_y)
         detected_audio_gaps, detected_audio_clicks = self.detector.process(audio_y, start_time=audio_content[0][0])
 
         print(f" * Audio detection ({self.audio_segment_index}):")
         print(f"     * Average amplitude   : {np.average(np.abs(audio_y)):.2f}")
-        print(f"     * Detected gap times  : {[(s.strftime('%H:%M:%S.%f'), e.strftime('%H:%M:%S.%f')) for s, e in detected_audio_gaps]}")
-        print(f"     * Detected click times: {[t.strftime('%H:%M:%S.%f') for t in detected_audio_clicks]}")
+        print(f"     * Detected gap times  : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
+        print(f"     * Detected click times: {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
 
+        # Plot audio signal and any detections
         if plot:
-            plt.rcParams['agg.path.chunksize'] = 20000
-            fig = plt.figure(figsize=(10, 7), tight_layout=True)
-            axs = fig.add_subplot(111)
+            # Setup
+            plt.rcParams['agg.path.chunksize'] = 1000
+            fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
 
-            axs.plot(time_x, audio_y, linewidth=1)
+            # Plot L/R/Mono channels
+            for idx, audio_channel in enumerate(audio_y):
+                time_index = np.linspace(0, len(time_x), len(time_x))
+                axs.plot(time_index, audio_channel, color='k', alpha=0.5, linewidth=0.5, label=f"Channel {idx}")
+
+            # axs.set_xticks(
+            #     [time_x[0], time_x[round(len(time_x) / 5)], time_x[round(len(time_x) / 5) * 2], time_x[round(len(time_x) / 5) * 3], time_x[round(len(time_x) / 5) * 4], time_x[-1]],
+            #     labels=[time_x[0], time_x[round(len(time_x) / 5)], time_x[round(len(time_x) / 5) * 2], time_x[round(len(time_x) / 5) * 3], time_x[round(len(time_x) / 5) * 4], time_x[-1]]
+            # )
+
+            # Plot timestamp of any audio clicks
+            # if len(detected_audio_clicks) > 0:
+            #     for time in detected_audio_clicks:
+            #         line = axs.axvline(time.strftime('%H:%M:%S.%f')[:-4], color='r', linewidth=1)
+
+            #     line.set_label('Detected click')
+
+            # Plot time range of any audio gaps
+            if len(detected_audio_gaps) > 0:
+                for start, end in detected_audio_gaps:
+                    approx_gap_start = min(time_x, key=lambda dt: abs(dt - start))
+                    approx_gap_start_idx = time_x.index(approx_gap_start)
+                    approx_gap_end = min(time_x, key=lambda dt: abs(dt - end))
+                    approx_gap_end_idx = time_x.index(approx_gap_end)
+
+                    line = axs.axvspan(approx_gap_start_idx, approx_gap_end_idx, color='b', alpha=0.3)
+
+                line.set_label('Detected gap')
+
             plt.xlabel('Capture Time (H:M:S)')
             plt.ylabel('Audio Sample')
-            plt.xticks(
-                time_x[::41000],
-                rotation=-90
-            )
-            plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].split('.')[0]} => {time_x[-1].split('.')[0]}))")
+            plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')}))")
+            plt.legend(loc=1)
             fig.savefig(f"output/audio-plot-{self.audio_segment_index}.png")
 
             print(f"     * Plot generated      : 'audio-plot-{self.audio_segment_index}.png'")
@@ -277,8 +320,9 @@ if __name__ == '__main__':
     audio_on = True
     video_on = True
     setup_mode_only = False
-    audio_device = 0
-    video_device = 0
+
+    audio_device = 3
+    video_device = 1
 
     # Set up the signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
@@ -289,8 +333,8 @@ if __name__ == '__main__':
     print(f"     * Setup mode (no processing) : {setup_mode_only}")
 
     # Set up audio and video streams
-    if audio_on: audio = AudioStream(device=audio_device)
     if video_on: video = VideoStream(device=video_device)
+    if audio_on and not setup_mode_only: audio = AudioStream(device=audio_device)
 
     if setup_mode_only and video_on:
         # Set up stream to show content but do no processing
