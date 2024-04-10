@@ -23,6 +23,8 @@ class VideoStream():
         self.video_device = device
         self.video_stream = cv2.VideoCapture(self.video_device)
         self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
+        self.width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.stream_open = False
 
     def launch(self, frame_queue=None, display_stream=False):
@@ -105,12 +107,13 @@ class AudioStream():
 
 
 class AudioVisualProcessor():
-    def __init__(self, video_fps=30, audio_fps=44100, audio_chunk_size=1024,
+    def __init__(self, video_fps=30, video_shape=(), audio_fps=44100, audio_chunk_size=1024,
                  audio_buffer_len_s=10, audio_overlap_len_s=2,
                  video_buffer_len_s=10, video_overlap_len_s=2):
 
         self.video_fps = video_fps
         self.audio_fps = audio_fps
+        self.video_shape = video_shape
         self.audio_segment_index = 0
         self.video_segment_index = 0
 
@@ -147,7 +150,7 @@ class AudioVisualProcessor():
 
             # Video processing module
             if len(video_frames) >= self.video_buffer_len_f:
-                video_segment = self.collate_video_frames(video_frames)
+                video_segment = self.collate_video_frames(video_frames, checkpoint_files)
                 self.video_detection(video_segment)
                 self.video_segment_index += 1
 
@@ -196,7 +199,7 @@ class AudioVisualProcessor():
 
         # Save audio data to WAV file for checking later
         if save_wav_file:
-            wav_file = wave.open(f'output/data/audio-data-{self.audio_segment_index}.wav', 'wb')
+            wav_file = wave.open(f'output/data/audio-segment-{self.audio_segment_index}.wav', 'wb')
             wav_file.setnchannels(no_channels)
             wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
             wav_file.setframerate(sample_rate)
@@ -205,14 +208,30 @@ class AudioVisualProcessor():
 
         return np.array(frame_buffer, dtype=object)
 
-    def collate_video_frames(self, frame_queue):
-        # Add main frames in video segment to buffer
+    def collate_video_frames(self, frame_queue, save_mp4_file=False):
+        # Setup memory buffer of frames and output video file
         frame_buffer = []
+        if save_mp4_file:
+            output_file = cv2.VideoWriter(
+                f"output/data/video-segment-{self.video_segment_index}.mp4",
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                self.video_fps,
+                self.video_shape
+            )
+
+        # Add main frames in video segment to buffer
         for _ in range(self.video_buffer_len_f - self.video_overlap_len_f):
-            frame_buffer.append(frame_queue.popleft())
+            frame = frame_queue.popleft()
+            frame_buffer.append(frame)
+            if save_mp4_file: output_file.write(frame[1])
 
         # Add overlap frames to buffer
-        frame_buffer.extend([frame_queue[i] for i in range(self.video_overlap_len_f)])
+        for i in range(self.video_overlap_len_f):
+            frame = frame_queue[i]
+            frame_buffer.append(frame)
+            if save_mp4_file: output_file.write(frame[1])
+
+        if save_mp4_file: output_file.release()
 
         return frame_buffer
 
@@ -378,7 +397,7 @@ if __name__ == '__main__':
 
         # Initialise and launch AV processing module
         if audio_on and video_on:
-            processor = AudioVisualProcessor(video_fps=video.frame_rate)
+            processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 video_module=video, video_frames=video_frame_queue,
