@@ -278,6 +278,7 @@ class AudioVisualProcessor():
             plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n")
             plt.legend(loc=1)
             fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
+            plt.close(fig)
 
             print(f"     * Plot generated      : 'audio-plot-{self.audio_segment_index}.png'")
 
@@ -314,6 +315,7 @@ class AudioVisualProcessor():
             )
             plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
             fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+            plt.close(fig)
 
             print(f"     * Plot generated      : 'video-plot-{self.video_segment_index}.png'")
 
@@ -328,7 +330,7 @@ if __name__ == '__main__':
     # Recieve input parameters from CLI
     parser = argparse.ArgumentParser(
         prog='capture_and_process',
-        description='Capture audio and video streams from a given camera/microphone and process detection algorithms over these streams.'
+        description='Capture audio and video streams from a camera/microphone and process detection algorithms over this content.'
     )
 
     parser.add_argument('-s', '--setup-mode', action='store_true', default=False)
@@ -336,6 +338,7 @@ if __name__ == '__main__':
     parser.add_argument('-nv', '--no-video', action='store_false', default=True)
     parser.add_argument('-a', '--audio', type=int, default=0)
     parser.add_argument('-v', '--video', type=int, default=0)
+    parser.add_argument('-f', '--save-files', action='store_true', default=False)
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
@@ -344,6 +347,8 @@ if __name__ == '__main__':
     video_on = args.no_video
     audio_device = args.audio
     video_device = args.video
+    save_av_files = args.save_files
+    print("Save files:", save_av_files)
 
     # Set up the signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
@@ -377,20 +382,21 @@ if __name__ == '__main__':
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 video_module=video, video_frames=video_frame_queue,
-                audio_gap_detection=True, audio_click_detection=False, checkpoint_files=False
+                audio_gap_detection=True, audio_click_detection=False,
+                checkpoint_files=save_av_files
             )
         elif video_on:
             processor = AudioVisualProcessor(video_fps=video.frame_rate)
             processor.process(
                 video_module=video, video_frames=video_frame_queue,
-                checkpoint_files=False
+                checkpoint_files=save_av_files
             )
         elif audio_on:
             processor = AudioVisualProcessor()
-            processor.process(audio_module=audio, audio_frames=audio_frame_queue)
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                audio_gap_detection=True, audio_click_detection=True, checkpoint_files=True
+                audio_gap_detection=True, audio_click_detection=True,
+                checkpoint_files=save_av_files
             )
         else:
             exit(0)
