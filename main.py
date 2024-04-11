@@ -17,16 +17,16 @@ def signal_handler(sig, frame):
 if __name__ == '__main__':
     # Recieve input parameters from CLI
     parser = argparse.ArgumentParser(
-        prog='capture_and_process',
+        prog='main.py',
         description='Capture audio and video streams from a camera/microphone and process detection algorithms over this content.'
     )
 
     parser.add_argument('-s', '--setup-mode', action='store_true', default=False)
     parser.add_argument('-na', '--no-audio', action='store_false', default=True)
     parser.add_argument('-nv', '--no-video', action='store_false', default=True)
+    parser.add_argument('-f', '--save-files', action='store_true', default=False)
     parser.add_argument('-a', '--audio', type=int, default=0)
     parser.add_argument('-v', '--video', type=int, default=0)
-    parser.add_argument('-f', '--save-files', action='store_true', default=False)
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
