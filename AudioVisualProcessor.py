@@ -1,109 +1,15 @@
-import datetime
 import math
-import signal
-from collections import deque
-from threading import Thread
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import pyaudio
-import sounddevice
-import argparse
 import wave
 
-from essentia_audio_detection import AudioDetector
-from maxvqa_video_detection import VideoDetector
+from EssentiaAudioDetector import AudioDetector
+from MaxVQAVideoDetector import VideoDetector
 
 
 Object = lambda **kwargs: type("Object", (), kwargs)
-
-class VideoStream():
-    def __init__(self, device=0):
-        # Define a video capture object
-        self.video_device = device
-        self.video_stream = cv2.VideoCapture(self.video_device)
-        self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
-        self.width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.stream_open = False
-
-    def launch(self, frame_queue=None, display_stream=False):
-        self.stream_open = True
-        # Show the video stream (no processing)
-        if display_stream:
-            while self.video_stream.isOpened():
-                _, frame = self.video_stream.read()
-                timestamp = datetime.datetime.now()
-                cv2.imshow('Video Stream', frame)
-                print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
-
-                # esc to quit
-                if cv2.waitKey(1) == 27:
-                    self.kill()
-                    break
-
-        # Conduct video processing (save frames to queue instead of displaying)
-        else:
-            # Flush initial two black frames
-            self.video_stream.read()
-            self.video_stream.read()
-
-            while self.stream_open:
-                # Capture the video frame by frame
-                _, frame = self.video_stream.read()
-                timestamp = datetime.datetime.now()
-                frame_queue.append((timestamp, frame))
-                # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
-
-        self.video_stream.release()
-        cv2.destroyAllWindows()
-        print("\nVideo thread ended.")
-
-    def kill(self):
-        self.stream_open = False
-        print("Video capture closed.")
-
-
-class AudioStream():
-    def __init__(self, device=1, sample_rate=44100, audio_channels=1):
-        self.format = pyaudio.paInt16
-        self.rate = sample_rate
-        self.chunk = 1024
-        self.stream = None
-        self.stream_open = False
-
-        self.audio_device = device
-        self.audio = pyaudio.PyAudio()
-        # self.audio_channels = self.audio.get_device_info_by_host_api_device_index(0, self.audio_device).get('maxInputChannels')
-        self.audio_channels = audio_channels
-
-        print(f'     * Audio input device         :', self.audio_device)
-        print(f'     * Audio input channels       :', self.audio_channels)
-
-    def launch(self, frame_queue):
-        # Start audio recording
-        self.stream_open = True
-        stream = self.audio.open(
-            format=self.format, rate=self.rate, input=True,
-            input_device_index=self.audio_device, channels=self.audio_channels,
-            frames_per_buffer=self.chunk
-        )
-
-        while self.stream_open:
-            frame = stream.read(self.chunk)
-            timestamp = datetime.datetime.now()
-
-            frame_queue.append((timestamp, frame))
-            # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
-
-        stream.stop_stream()
-        stream.close()
-        self.audio.terminate()
-        print("Audio thread ended.")
-
-    def kill(self):
-        self.stream_open = False
-        print("Audio capture closed.")
 
 
 class AudioVisualProcessor():
@@ -337,85 +243,3 @@ class AudioVisualProcessor():
             plt.close(fig)
 
             print(f"     * Plot generated      : 'video-plot-{self.video_segment_index}.png'")
-
-
-def signal_handler(sig, frame):
-    print("\nCtrl+C detected. Stopping all AV threads.")
-    if video_on: video.kill()
-    if audio_on and not setup_mode_only: audio.kill()
-
-
-if __name__ == '__main__':
-    # Recieve input parameters from CLI
-    parser = argparse.ArgumentParser(
-        prog='capture_and_process',
-        description='Capture audio and video streams from a camera/microphone and process detection algorithms over this content.'
-    )
-
-    parser.add_argument('-s', '--setup-mode', action='store_true', default=False)
-    parser.add_argument('-na', '--no-audio', action='store_false', default=True)
-    parser.add_argument('-nv', '--no-video', action='store_false', default=True)
-    parser.add_argument('-a', '--audio', type=int, default=0)
-    parser.add_argument('-v', '--video', type=int, default=0)
-    parser.add_argument('-f', '--save-files', action='store_true', default=False)
-
-    # Decode input parameters to toggle between cameras, microphones, and setup mode.
-    args = parser.parse_args()
-    setup_mode_only = args.setup_mode
-    audio_on = args.no_audio
-    video_on = args.no_video
-    audio_device = args.audio
-    video_device = args.video
-    save_av_files = args.save_files
-    print("Save files:", save_av_files)
-
-    # Set up the signal handler for Ctrl+C
-    signal.signal(signal.SIGINT, signal_handler)
-
-    print(f"\nInitialising capture and processing modules", end='\n\n')
-    print(f"Audio devices available: \n{sounddevice.query_devices()}", end='\n\n')
-    print(f" * Parameters:")
-    print(f"     * Setup mode (no processing) : {setup_mode_only}")
-
-    if setup_mode_only:
-        # Set up stream to show content but do no processing
-        video = VideoStream(device=video_device)
-        video.launch(display_stream=True)
-    else:
-        # Set up and launch audio-video stream threads
-        if audio_on:
-            audio = AudioStream(device=audio_device)
-            audio_frame_queue = deque()
-            audio_thread = Thread(target=audio.launch, args=(audio_frame_queue,))
-            audio_thread.start()
-
-        if video_on:
-            video_frame_queue = deque()
-            video = VideoStream(device=video_device)
-            video_thread = Thread(target=video.launch, args=(video_frame_queue,))
-            video_thread.start()
-
-        # Initialise and launch AV processing module
-        if audio_on and video_on:
-            processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
-            processor.process(
-                audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                video_module=video, video_frames=video_frame_queue,
-                audio_gap_detection=True, audio_click_detection=False,
-                checkpoint_files=save_av_files
-            )
-        elif video_on:
-            processor = AudioVisualProcessor(video_fps=video.frame_rate)
-            processor.process(
-                video_module=video, video_frames=video_frame_queue,
-                checkpoint_files=save_av_files
-            )
-        elif audio_on:
-            processor = AudioVisualProcessor()
-            processor.process(
-                audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                audio_gap_detection=True, audio_click_detection=True,
-                checkpoint_files=save_av_files
-            )
-        else:
-            exit(0)
