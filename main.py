@@ -5,7 +5,7 @@ import sounddevice
 import argparse
 
 from AudioVisualStreams import AudioStream, VideoStream
-from AudioVisualProcessor import AudioVisualProcessor
+from AudioVisualDetector import AudioVisualDetector
 
 
 def signal_handler(sig, frame):
@@ -70,7 +70,7 @@ if __name__ == '__main__':
 
         # Initialise and launch AV processing module
         if audio_on and video_on:
-            processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+            processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 video_module=video, video_frames=video_frame_queue,
@@ -78,13 +78,13 @@ if __name__ == '__main__':
                 checkpoint_files=save_av_files
             )
         elif video_on:
-            processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+            processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
             processor.process(
                 video_module=video, video_frames=video_frame_queue,
                 checkpoint_files=save_av_files
             )
         elif audio_on:
-            processor = AudioVisualProcessor()
+            processor = AudioVisualDetector()
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 audio_gap_detection=True, audio_click_detection=True,
