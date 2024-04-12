@@ -1,8 +1,5 @@
 import matplotlib.pyplot as plt
-import cv2
 import numpy as np
-import pyaudio
-import wave
 
 from AudioVisualProcessor import AudioVisualProcessor
 from EssentiaAudioDetector import AudioDetector
@@ -63,75 +60,6 @@ class AudioVisualDetector(AudioVisualProcessor):
 
         print(f"\nProcessing module ended.")
         print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
-
-    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100, save_wav_file=False):
-        frame_bytes_buffer = []
-        timestamps = []
-
-        # Add main frames in video segment to buffer
-        for _ in range(self.audio_buffer_len_f - self.audio_overlap_len_f):
-            timestamp, frame_bytes = frame_queue.popleft()
-            timestamps.append(timestamp)
-            frame_bytes_buffer.append(frame_bytes)
-
-         # Add overlap frames to buffer
-        for i in range(self.audio_overlap_len_f):
-            timestamp, frame_bytes = frame_queue[i]
-            timestamps.append(timestamp)
-            frame_bytes_buffer.append(frame_bytes)
-
-        # Decode all frames from byte representation and arrange into timestamped segment
-        frame_buffer = []
-        for timestamp, frame_bytes in zip(timestamps, frame_bytes_buffer):
-            frame = np.frombuffer(frame_bytes, np.int16).astype(np.float32)
-
-            # Format stereo and mono channel audio into shape (1, 1024) or (2, 1024)
-            if len(frame) == 2 * self.chunk_size:
-                channel0 = frame[0::2]
-                channel1 = frame[1::2]
-                frame = np.array([channel0, channel1])
-            else:
-                frame = np.expand_dims(frame, axis=0)
-
-            frame_buffer.append((timestamp, frame))
-
-        # Save audio data to WAV file for checking later
-        if save_wav_file:
-            wav_file = wave.open(f'output/data/audio-segment-{self.audio_segment_index}.wav', 'wb')
-            wav_file.setnchannels(no_channels)
-            wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(b''.join(frame_bytes_buffer))
-            wav_file.close()
-
-        return np.array(frame_buffer, dtype=object)
-
-    def collate_video_frames(self, frame_queue, save_mp4_file=False):
-        # Setup memory buffer of frames and output video file
-        frame_buffer = []
-        if save_mp4_file:
-            output_file = cv2.VideoWriter(
-                f"output/data/video-segment-{self.video_segment_index}.mp4",
-                cv2.VideoWriter_fourcc(*'mp4v'),
-                self.video_fps,
-                self.video_shape
-            )
-
-        # Add main frames in video segment to buffer
-        for _ in range(self.video_buffer_len_f - self.video_overlap_len_f):
-            frame = frame_queue.popleft()
-            frame_buffer.append(frame)
-            if save_mp4_file: output_file.write(frame[1])
-
-        # Add overlap frames to buffer
-        for i in range(self.video_overlap_len_f):
-            frame = frame_queue[i]
-            frame_buffer.append(frame)
-            if save_mp4_file: output_file.write(frame[1])
-
-        if save_mp4_file: output_file.release()
-
-        return frame_buffer
 
     def audio_detection(self, audio_content, detect_gaps=True, detect_clicks=True, plot=True):
         no_channels = audio_content[0][1].shape[0]
