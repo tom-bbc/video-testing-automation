@@ -42,7 +42,7 @@ class AudioStream():
 
     def kill(self):
         self.stream_open = False
-        print("Audio capture closed.")
+        print("Microphone turned off.")
 
 
 class VideoStream():
@@ -89,4 +89,4 @@ class VideoStream():
 
     def kill(self):
         self.stream_open = False
-        print("Video capture closed.")
+        print("Camera turned off.")
