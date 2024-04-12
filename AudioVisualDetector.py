@@ -22,14 +22,19 @@ class AudioVisualDetector(AudioVisualProcessor):
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
                 video_module=Object(stream_open=False, video_device=None), video_frames=[],
                 audio_gap_detection=True, audio_click_detection=True, checkpoint_files=False):
-        print(f"     * Audio segment size         : {self.audio_buffer_len_f}")
-        print(f"     * Audio overlap size         : {self.audio_overlap_len_f}")
-        print(f"     * Video capture source       : {video_module.video_device}")
-        print(f"     * Video frame rate           : {self.video_fps}")
-        print(f"     * Video segment size         : {self.video_buffer_len_f}")
-        print(f"     * Video overlap size         : {self.video_overlap_len_f}", end='\n\n')
 
-        print(f"Start of audio-visual processing")
+        if audio_module.stream_open:
+            print(f"         * Segment size           : {self.audio_buffer_len_f}")
+            print(f"         * Overlap size           : {self.audio_overlap_len_f}")
+
+        if video_module.stream_open:
+            print(f"     * Video:")
+            print(f"         * Capture device         : {video_module.video_device}")
+            print(f"         * Frame rate             : {self.video_fps}")
+            print(f"         * Segment size           : {self.video_buffer_len_f}")
+            print(f"         * Overlap size           : {self.video_overlap_len_f}")
+
+        print(f"\nStart of audio-visual processing")
 
         while (audio_module.stream_open or video_module.stream_open) or \
             (len(audio_frames) >= self.audio_buffer_len_f) or \
@@ -145,10 +150,10 @@ class AudioVisualDetector(AudioVisualProcessor):
         )
 
         print(f"\n * Audio detection (segment {self.audio_segment_index}):")
-        print(f"     * Segment time range  : {audio_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {audio_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-        print(f"     * Average amplitude   : {np.average(np.abs(audio_y)):.2f}")
-        print(f"     * Detected gap times  : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
-        print(f"     * Detected click times: {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
+        print(f"     * Segment time range         : {audio_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {audio_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
+        print(f"     * Average amplitude          : {np.average(np.abs(audio_y)):.2f}")
+        print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
+        print(f"     * Detected click times       : {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
 
         # Plot audio signal and any detections
         if plot:
@@ -192,7 +197,7 @@ class AudioVisualDetector(AudioVisualProcessor):
             fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
             plt.close(fig)
 
-            print(f"     * Plot generated      : 'audio-plot-{self.audio_segment_index}.png'")
+            print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
 
     def video_detection(self, video_content, plot=True):
         # Detect average brightness
@@ -207,9 +212,9 @@ class AudioVisualDetector(AudioVisualProcessor):
             if average_brightness < 10: black_frame_detected = True
 
         print(f"\n * Video detection (segment {self.video_segment_index}):")
-        print(f"     * Segment time range  : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-        print(f"     * Average brightness  : {np.average(brightness):.2f}")
-        print(f"     * Black frame detected: {black_frame_detected}")
+        print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
+        print(f"     * Average brightness         : {np.average(brightness):.2f}")
+        print(f"     * Black frame detected       : {black_frame_detected}")
 
         if plot:
             fig = plt.figure(figsize=(10, 7), tight_layout=True)
@@ -227,4 +232,4 @@ class AudioVisualDetector(AudioVisualProcessor):
             fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
             plt.close(fig)
 
-            print(f"     * Plot generated      : 'video-plot-{self.video_segment_index}.png'")
+            print(f"     * Plot generated             : 'video-plot-{self.video_segment_index}.png'")

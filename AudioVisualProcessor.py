@@ -29,12 +29,17 @@ class AudioVisualProcessor():
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
                 video_module=Object(stream_open=False, video_device=None), video_frames=[],
                 checkpoint_files=False):
-        print(f"     * Audio segment size         : {self.audio_buffer_len_f}")
-        print(f"     * Audio overlap size         : {self.audio_overlap_len_f}")
-        print(f"     * Video capture source       : {video_module.video_device}")
-        print(f"     * Video frame rate           : {self.video_fps}")
-        print(f"     * Video segment size         : {self.video_buffer_len_f}")
-        print(f"     * Video overlap size         : {self.video_overlap_len_f}", end='\n\n')
+
+        if audio_module.stream_open:
+            print(f"         * Segment size           : {self.audio_buffer_len_f}")
+            print(f"         * Overlap size           : {self.audio_overlap_len_f}")
+
+        if video_module.stream_open:
+            print(f"     * Video:")
+            print(f"         * Capture device         : {video_module.video_device}")
+            print(f"         * Frame rate             : {self.video_fps}")
+            print(f"         * Segment size           : {self.video_buffer_len_f}")
+            print(f"         * Overlap size           : {self.video_overlap_len_f}", end='\n\n')
 
         print(f"Start of audio-visual processing")
 

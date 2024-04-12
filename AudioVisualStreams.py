@@ -16,8 +16,9 @@ class AudioStream():
         # self.audio_channels = self.audio.get_device_info_by_host_api_device_index(0, self.audio_device).get('maxInputChannels')
         self.audio_channels = audio_channels
 
-        print(f'     * Audio input device         :', self.audio_device)
-        print(f'     * Audio input channels       :', self.audio_channels)
+        print(f"     * Audio:")
+        print(f"         * Capture device         : {self.audio_device}")
+        print(f"         * Input channels         : {self.audio_channels}")
 
     def launch(self, frame_queue):
         # Start audio recording
