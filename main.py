@@ -5,6 +5,7 @@ import sounddevice
 import argparse
 
 from AudioVisualStreams import AudioStream, VideoStream
+from AudioVisualProcessor import AudioVisualProcessor
 from AudioVisualDetector import AudioVisualDetector
 
 
@@ -24,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--setup-mode', action='store_true', default=False)
     parser.add_argument('-na', '--no-audio', action='store_false', default=True)
     parser.add_argument('-nv', '--no-video', action='store_false', default=True)
+    parser.add_argument('-nd', '--no-detect', action='store_false', default=True)
     parser.add_argument('-f', '--save-files', action='store_true', default=False)
     parser.add_argument('-a', '--audio', type=int, default=0)
     parser.add_argument('-v', '--video', type=int, default=0)
@@ -33,6 +35,7 @@ if __name__ == '__main__':
     audio_device = args.audio
     video_device = args.video
     save_av_files = args.save_files
+    detection_on = args.no_detect
 
     global audio_on, video_on, setup_mode_only
     audio_on = args.no_audio
@@ -41,8 +44,13 @@ if __name__ == '__main__':
 
     print(f"\nInitialising capture and processing modules", end='\n\n')
     print(f"Audio devices available: \n{sounddevice.query_devices()}", end='\n\n')
-    print(f" * Parameters:")
-    print(f"     * Setup mode (no processing) : {setup_mode_only}")
+    print(f" * Processes:")
+    print(f"     * Audio                      : {audio_on}")
+    print(f"     * Video                      : {video_on}")
+    print(f"     * AV detection algorithms    : {detection_on}")
+    print(f"     * Save AV segment files      : {save_av_files or not detection_on}",)
+    print(f"     * Setup mode (no processing) : {setup_mode_only}", end='\n\n')
+    print(f" * Capture setup:")
 
     global audio, video
 
@@ -54,6 +62,7 @@ if __name__ == '__main__':
         print()
         video = VideoStream(device=video_device)
         video.launch(display_stream=True)
+
     else:
         # Set up and launch audio-video stream threads
         if audio_on:
@@ -68,27 +77,48 @@ if __name__ == '__main__':
             video_thread = Thread(target=video.launch, args=(video_frame_queue,))
             video_thread.start()
 
-        # Initialise and launch AV processing module
-        if audio_on and video_on:
-            processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
-            processor.process(
-                audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                video_module=video, video_frames=video_frame_queue,
-                audio_gap_detection=True, audio_click_detection=False,
-                checkpoint_files=save_av_files
-            )
-        elif video_on:
-            processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
-            processor.process(
-                video_module=video, video_frames=video_frame_queue,
-                checkpoint_files=save_av_files
-            )
-        elif audio_on:
-            processor = AudioVisualDetector()
-            processor.process(
-                audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                audio_gap_detection=True, audio_click_detection=True,
-                checkpoint_files=save_av_files
-            )
+        # Check if user wants to run detection algorithms, or just save av segments to disk
+        if not detection_on:
+            if audio_on and video_on:
+                processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor.process(
+                    audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
+                    video_module=video, video_frames=video_frame_queue, checkpoint_files=True
+                )
+            elif video_on:
+                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor.process(video_module=video, video_frames=video_frame_queue, checkpoint_files=True)
+            elif audio_on:
+                processor = AudioVisualDetector()
+                processor.process(
+                    audio_module=audio, audio_frames=audio_frame_queue,
+                    audio_channels=1, checkpoint_files=True
+                )
+            else:
+                exit(0)
+
+        # Initialise and launch av detetion algorithms
         else:
-            exit(0)
+            if audio_on and video_on:
+                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor.process(
+                    audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
+                    video_module=video, video_frames=video_frame_queue,
+                    audio_gap_detection=True, audio_click_detection=False,
+                    checkpoint_files=save_av_files
+                )
+            elif video_on:
+                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor.process(
+                    video_module=video, video_frames=video_frame_queue,
+                    checkpoint_files=save_av_files
+                )
+            elif audio_on:
+                processor = AudioVisualDetector()
+                processor.process(
+                    audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
+                    audio_gap_detection=True, audio_click_detection=True,
+                    checkpoint_files=save_av_files
+                )
+            else:
+                exit(0)
