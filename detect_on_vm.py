@@ -71,14 +71,15 @@ class Detector():
 
         return audio_filenames, video_filenames
 
-    def get_s3_audio(self, filename, save_locally=False):
+    def get_s3_audio(self, filename, delete_remote=True, save_locally=False):
         # Retrieve and decode wav file from s3
         obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=filename)
         byte_data = obj['Body'].read()
         audio_asset = np.frombuffer(byte_data, np.float32)
 
         # Delete file from s3 after reading it
-        self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
+        if delete_remote:
+            self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
 
         # TEST: save wav file
         if save_locally:
@@ -91,7 +92,7 @@ class Detector():
 
         return audio_asset
 
-    def get_s3_video(self, filename, save_locally=False):
+    def get_s3_video(self, filename, delete_remote=True, save_locally=False):
         # Retrieve and decode mp4 file from s3
         video_url = self.s3_client.generate_presigned_url(
             ClientMethod='get_object',
@@ -111,7 +112,8 @@ class Detector():
         video_asset = np.stack(frame_buffer, axis=0)  # dimensions (T, H, W, C)
 
         # Delete file from s3 after reading it
-        self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
+        if delete_remote:
+            self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
 
         # TEST: save mp4 file
         if save_locally:
