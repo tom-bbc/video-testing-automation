@@ -10,7 +10,7 @@ import cv2
 class Detector():
     def __init__(self, aws_access_key, aws_secret_key, *args, **kwargs):
         # super(Detector, self).__init__(*args, **kwargs)
-        self.s3_bucket = 'av-segment-queue'
+        self.s3_bucket = 'video-testing-automation'
         self.aws_session = boto3.session.Session()
         self.s3_client = self.aws_session.client(
             service_name='s3',
