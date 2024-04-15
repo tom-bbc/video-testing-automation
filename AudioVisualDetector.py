@@ -13,7 +13,7 @@ class AudioVisualDetector(AudioVisualProcessor):
     def __init__(self, *args, **kwargs):
         super(AudioVisualDetector, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
-        # self.video_detector = VideoDetector()
+        self.video_detector = VideoDetector()
 
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
@@ -141,41 +141,41 @@ class AudioVisualDetector(AudioVisualProcessor):
 
         return {"gaps": detected_audio_gaps, "clicks": detected_audio_clicks}
 
-    def video_detection(self, video_content, plot=True):
-        # MaxVQA AI detection process
-        # print(f"\n * Video detection (segment {self.video_segment_index}):")
-        # print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-        # vqa_values = self.video_detector.process(video_content)
-        # print(vqa_values)
+    def video_detection(self, video_content, time_indexed_video=True, plot=True):
+        if not time_indexed_video:
+            # MaxVQA AI detection process
+            print(f"\n * Video detection (segment {self.video_segment_index}):")
+            vqa_values = self.video_detector.process(video_content)
+            print(vqa_values)
+        else:
+            # Detect average brightness
+            brightness = []
+            black_frame_detected = False
 
-        # Detect average brightness
-        brightness = []
-        black_frame_detected = False
+            for time, frame in video_content:
+                average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
+                brightness.append(average_brightness)
+                if average_brightness < 10: black_frame_detected = True
 
-        for time, frame in video_content:
-            average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
-            brightness.append(average_brightness)
-            if average_brightness < 10: black_frame_detected = True
+            print(f"\n * Video detection (segment {self.video_segment_index}):")
+            print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
+            print(f"     * Average brightness         : {np.average(brightness):.2f}")
+            print(f"     * Black frame detected       : {black_frame_detected}")
 
-        print(f"\n * Video detection (segment {self.video_segment_index}):")
-        print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-        print(f"     * Average brightness         : {np.average(brightness):.2f}")
-        print(f"     * Black frame detected       : {black_frame_detected}")
+            if plot:
+                fig = plt.figure(figsize=(10, 7), tight_layout=True)
+                axs = fig.add_subplot(111)
 
-        if plot:
-            fig = plt.figure(figsize=(10, 7), tight_layout=True)
-            axs = fig.add_subplot(111)
+                axs.plot(brightness, linewidth=1)
+                plt.xlabel('Capture Time (H:M:S)')
+                plt.ylabel('Average Brightness')
+                plt.xticks(
+                    ticks=range(0, len(video_content), 30),
+                    labels=[f[0].strftime('%H:%M:%S.%f')[:-4] for f in video_content[::30]],
+                    rotation=-90
+                )
+                plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
+                fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+                plt.close(fig)
 
-            axs.plot(brightness, linewidth=1)
-            plt.xlabel('Capture Time (H:M:S)')
-            plt.ylabel('Average Brightness')
-            plt.xticks(
-                ticks=range(0, len(video_content), 30),
-                labels=[f[0].strftime('%H:%M:%S.%f')[:-4] for f in video_content[::30]],
-                rotation=-90
-            )
-            plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
-            fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
-            plt.close(fig)
-
-            print(f"     * Plot generated             : 'video-plot-{self.video_segment_index}.png'")
+                print(f"     * Plot generated             : 'video-plot-{self.video_segment_index}.png'")
