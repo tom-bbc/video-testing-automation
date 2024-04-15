@@ -79,7 +79,7 @@ class AudioVisualProcessor():
         # Decode all frames from byte representation and arrange into timestamped segment
         frame_buffer = []
         for timestamp, frame_bytes in zip(timestamps, frame_bytes_buffer):
-            frame = np.frombuffer(frame_bytes, np.int16).astype(np.float32)
+            frame = np.frombuffer(frame_bytes, np.int16)
 
             # Format stereo and mono channel audio into shape (1, 1024) or (2, 1024)
             if len(frame) == 2 * self.chunk_size:
