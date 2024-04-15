@@ -53,12 +53,14 @@ class AudioDetector():
         detected_gaps = zip(detected_gap_starts, detected_gap_ends)
         output = []
 
-        if start_time != 0:
-            for start, end in detected_gaps:
+        for start, end in detected_gaps:
+            if start_time != 0:
                 output.append((
                     start_time + datetime.timedelta(seconds=float(start)),
                     start_time + datetime.timedelta(seconds=float(end))
                 ))
+            else:
+                output.append((start, end))
 
         return output
 

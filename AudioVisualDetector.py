@@ -61,78 +61,96 @@ class AudioVisualDetector(AudioVisualProcessor):
         print(f"\nProcessing module ended.")
         print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
 
-    def audio_detection(self, audio_content, detect_gaps=True, detect_clicks=True, plot=True):
-        no_channels = audio_content[0][1].shape[0]
-        audio_y = np.array([[]] * no_channels)
-        time_x = []
+    def audio_detection(self, audio_content, time_indexed_audio=True, detect_gaps=True, detect_clicks=True, plot=True):
+        if not time_indexed_audio:
+            detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
+                audio_content,
+                gap_detection=detect_gaps,
+                click_detection=detect_clicks
+            )
 
-        for time, chunk in audio_content:
-            time_x.extend([time] * chunk.shape[1])
-            audio_y = np.append(audio_y, chunk, axis=1)
+            print(f"\n * Audio detection (segment {self.audio_segment_index}):")
+            print(f"     * Detected gap times         : {detected_audio_gaps}")
+            print(f"     * Detected click times       : {detected_audio_clicks}", end='\n\n')
 
-        detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
-            audio_y,
-            start_time=audio_content[0][0],
-            gap_detection=detect_gaps,
-            click_detection=detect_clicks
-        )
+        else:
+            no_channels = audio_content[0][1].shape[0]
+            audio_y = np.array([[]] * no_channels)
+            time_x = []
 
-        print(f"\n * Audio detection (segment {self.audio_segment_index}):")
-        print(f"     * Segment time range         : {audio_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {audio_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-        print(f"     * Average amplitude          : {np.average(np.abs(audio_y)):.2f}")
-        print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
-        print(f"     * Detected click times       : {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
+            for time, chunk in audio_content:
+                time_x.extend([time] * chunk.shape[1])
+                audio_y = np.append(audio_y, chunk, axis=1)
 
-        # Plot audio signal and any detections
-        if plot:
-            # Setup
-            plt.rcParams['agg.path.chunksize'] = 1000
-            fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
+            detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
+                audio_y,
+                start_time=audio_content[0][0],
+                gap_detection=detect_gaps,
+                click_detection=detect_clicks
+            )
 
-            # Plot L/R/Mono channels
-            for idx, audio_channel in enumerate(audio_y):
-                time_index = np.linspace(0, len(time_x), len(time_x))
-                axs.plot(time_index, audio_channel, color='k', alpha=0.5, linewidth=0.5, label=f"Channel {idx}")
+            print(f"\n * Audio detection (segment {self.audio_segment_index}):")
+            print(f"     * Segment time range         : {audio_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {audio_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
+            print(f"     * Average amplitude          : {np.average(np.abs(audio_y)):.2f}")
+            print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
+            print(f"     * Detected click times       : {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
 
-            # Plot time range of any audio gaps
-            if len(detected_audio_gaps) > 0:
-                for start, end in detected_audio_gaps:
-                    approx_gap_start = min(time_x, key=lambda dt: abs(dt - start))
-                    approx_gap_start_idx = time_x.index(approx_gap_start)
-                    approx_gap_end = min(time_x, key=lambda dt: abs(dt - end))
-                    approx_gap_end_idx = time_x.index(approx_gap_end)
+            # Plot audio signal and any detections
+            if plot:
+                # Setup
+                plt.rcParams['agg.path.chunksize'] = 1000
+                fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
 
-                    line = axs.axvspan(approx_gap_start_idx, approx_gap_end_idx, color='b', alpha=0.3)
+                # Plot L/R/Mono channels
+                for idx, audio_channel in enumerate(audio_y):
+                    time_index = np.linspace(0, len(time_x), len(time_x))
+                    axs.plot(time_index, audio_channel, color='k', alpha=0.5, linewidth=0.5, label=f"Channel {idx}")
 
-                line.set_label('Detected gap')
+                # Plot time range of any audio gaps
+                if len(detected_audio_gaps) > 0:
+                    for start, end in detected_audio_gaps:
+                        approx_gap_start = min(time_x, key=lambda dt: abs(dt - start))
+                        approx_gap_start_idx = time_x.index(approx_gap_start)
+                        approx_gap_end = min(time_x, key=lambda dt: abs(dt - end))
+                        approx_gap_end_idx = time_x.index(approx_gap_end)
 
-            # Plot time range of any click artefacts
-            if len(detected_audio_clicks) > 0:
-                for time in detected_audio_clicks:
-                    approx_click_time = min(time_x, key=lambda dt: abs(dt - time))
-                    approx_click_idx = time_x.index(approx_click_time)
-                    line = axs.axvline(approx_click_idx, color='r', linewidth=1)
+                        line = axs.axvspan(approx_gap_start_idx, approx_gap_end_idx, color='b', alpha=0.3)
 
-                line.set_label('Detected click')
+                    line.set_label('Detected gap')
 
-            axs.set_xticks(time_index[::44100])
-            axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::44100]])
+                # Plot time range of any click artefacts
+                if len(detected_audio_clicks) > 0:
+                    for time in detected_audio_clicks:
+                        approx_click_time = min(time_x, key=lambda dt: abs(dt - time))
+                        approx_click_idx = time_x.index(approx_click_time)
+                        line = axs.axvline(approx_click_idx, color='r', linewidth=1)
 
-            plt.xlabel('Capture Time (H:M:S)')
-            plt.ylabel('Audio Sample')
-            plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n")
-            plt.legend(loc=1)
-            fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
-            plt.close(fig)
+                    line.set_label('Detected click')
 
-            print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
+                axs.set_xticks(time_index[::44100])
+                axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::44100]])
+
+                plt.xlabel('Capture Time (H:M:S)')
+                plt.ylabel('Audio Sample')
+                plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n")
+                plt.legend(loc=1)
+                fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
+                plt.close(fig)
+
+                print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
+
+        return {"gaps": detected_audio_gaps, "clicks": detected_audio_clicks}
 
     def video_detection(self, video_content, plot=True):
+        # MaxVQA AI detection process
+        # print(f"\n * Video detection (segment {self.video_segment_index}):")
+        # print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
+        # vqa_values = self.video_detector.process(video_content)
+        # print(vqa_values)
+
         # Detect average brightness
         brightness = []
         black_frame_detected = False
-
-        # self.video_detector.process(video_content)
 
         for time, frame in video_content:
             average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)

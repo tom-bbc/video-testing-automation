@@ -9,3 +9,5 @@ pip3 install numpy
 
 apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 pip3 install opencv-python
+
+git clone git@github.com:tom-bbc/video-testing-automation.git
