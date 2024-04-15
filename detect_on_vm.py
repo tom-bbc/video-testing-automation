@@ -2,6 +2,7 @@ import numpy as np
 import wave
 import time
 import boto3
+import cv2
 
 # from AudioVisualDetector import AudioVisualDetector
 
@@ -30,24 +31,20 @@ class Detector():
             # Run audio detection
             if index < len(audio_segment_paths):
                 audio_path = audio_segment_paths[index]
-                audio_segment = self.get_s3_file(audio_path)
-                print("New audio segment:", audio_segment)
+                audio_segment = self.get_s3_audio(audio_path)
+                print(f"New audio segment: {audio_path} {audio_segment.shape}")
                 # self.audio_detection(audio_segment, plot=False)
                 # self.audio_segment_index += 1
 
             # Run video detection
             if index < len(video_segment_paths):
                 video_path = video_segment_paths[index]
-                video_segment = self.get_s3_file(video_path)
-                print("New video segment:", video_segment)
+                video_segment = self.get_s3_video(video_path)
+                print(f"New video segment: {video_path} {video_segment.shape}")
                 # self.video_detection(video_segment, plot=False)
                 # self.video_segment_index += 1
 
     def get_av_filenames(self):
-        # s3_buckets = s3_client.list_buckets()['Buckets']
-        # for bucket in s3_buckets:
-        #     print(f"Bucket: {bucket['Name']}")
-
         sort_by_modified_date = lambda obj: int(obj['LastModified'].strftime('%s'))
 
         # Get most recent audio segment files
@@ -74,24 +71,63 @@ class Detector():
 
         return audio_filenames, video_filenames
 
-    def get_s3_file(self, filename):
-        # Retrieve and decode file from s3
+    def get_s3_audio(self, filename, save_locally=False):
+        # Retrieve and decode wav file from s3
         obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=filename)
         byte_data = obj['Body'].read()
-        media_asset = np.frombuffer(byte_data, np.float32)
-        # ERROR HERE: `np.frombuffer` does not work for decoding/reading mp4 files as it produces a 1D array.
+        audio_asset = np.frombuffer(byte_data, np.float32)
 
         # Delete file from s3 after reading it
         self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
 
-        # wav_file = wave.open(f'test-audio-file.wav', 'wb')
-        # wav_file.setnchannels(1)
-        # wav_file.setsampwidth(2)
-        # wav_file.setframerate(44100)
-        # wav_file.writeframes(b''.join(audio_data))
-        # wav_file.close()
+        # TEST: save wav file
+        if save_locally:
+            wav_file = wave.open(f'test-audio-file.wav', 'wb')
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(44100)
+            wav_file.writeframes(b''.join(audio_asset))
+            wav_file.close()
 
-        return media_asset
+        return audio_asset
+
+    def get_s3_video(self, filename, save_locally=False):
+        # Retrieve and decode mp4 file from s3
+        video_url = self.s3_client.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={'Bucket': self.s3_bucket, 'Key': filename}
+        )
+
+        video_source = cv2.VideoCapture(video_url)
+        frame_buffer = []
+        success = True
+
+        while success:
+            # Read video frame-by-frame from the opencv capture object; img is (H, W, C)
+            success, frame = video_source.read()
+            if success:
+                frame_buffer.append(frame)
+
+        video_asset = np.stack(frame_buffer, axis=0)  # dimensions (T, H, W, C)
+
+        # Delete file from s3 after reading it
+        self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
+
+        # TEST: save mp4 file
+        if save_locally:
+            output_file = cv2.VideoWriter(
+                f"test-video-file.mp4",
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                video_source.get(cv2.CAP_PROP_FPS),
+                (int(video_source.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video_source.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+            )
+
+            for f in video_asset:
+                output_file.write(f)
+
+            output_file.release()
+
+        return video_asset
 
 
 if __name__ == '__main__':
