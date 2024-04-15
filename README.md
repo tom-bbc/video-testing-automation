@@ -3,14 +3,27 @@
 ## Installing
 
 ### Installing Video Detection Module
+1. Install ExplainableVQA deps:
 ```
 git submodule update --init --recursive
 pip install -r ExplainableVQA/requirements.txt
+```
+2. Install open_clip:
 
+On Mac:
+```
 sed -i "" "92s/return x\[0\]/return x/" ExplainableVQA/open_clip/src/open_clip/modified_resnet.py
 pip install -e ExplainableVQA/open_clip
+```
+On Linux:
+```
+sed -i '92s/return x\[0\]/return x/' src/open_clip/modified_resnet.py
+pip install -e ExplainableVQA/open_clip
+```
+3. Install Dover:
 
-sed -i "" "4s/decord/eva-decord/" ExplainableVQA/DOVER/requirements.txt
+On Mac first run this before continuing: `sed -i "" "4s/decord/eva-decord/" ExplainableVQA/DOVER/requirements.txt`
+```
 pip install -e ExplainableVQA/DOVER
 mkdir ExplainableVQA/DOVER/pretrained_weights
 wget https://github.com/VQAssessment/DOVER/releases/download/v0.1.0/DOVER.pth -P ExplainableVQA/DOVER/pretrained_weights/

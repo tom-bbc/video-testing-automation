@@ -45,7 +45,7 @@ class CloudDetector(AudioVisualDetector):
                 video_segment = self.get_s3_video(video_path)
                 print(f"New video segment: {video_path} {video_segment.shape}")
 
-                results = self.video_detection(video_segment, plot=False)
+                results = self.video_detection(video_segment, time_indexed_video=False, plot=False)
                 self.video_segment_index += 1
 
     def get_av_filenames(self, audio_detection=True, video_detection=True):
@@ -98,7 +98,7 @@ class CloudDetector(AudioVisualDetector):
 
         return audio_asset
 
-    def get_s3_video(self, filename, delete_remote=True, save_locally=False):
+    def get_s3_video(self, filename, delete_remote=False, save_locally=False):
         # Retrieve and decode mp4 file from s3
         video_url = self.s3_client.generate_presigned_url(
             ClientMethod='get_object',
@@ -143,4 +143,4 @@ if __name__ == '__main__':
     aws_secret_key = "38619fd506354a90ae58d2feaceb5824"
 
     detector = CloudDetector(aws_access_key, aws_secret_key)
-    detector.process(video_detection=False)
+    detector.process()
