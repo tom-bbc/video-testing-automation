@@ -8,6 +8,8 @@ from ExplainableVQA.DOVER.dover import DOVER
 from ExplainableVQA.DOVER.dover.datasets import UnifiedFrameSampler, get_single_view
 from ExplainableVQA.model import TextEncoder, MaxVQA, EnhancedVisualEncoder
 
+torch.cuda.empty_cache()
+
 
 # Setup variables & parameters
 dimension_names = [
@@ -90,11 +92,11 @@ def setup_models(text_prompts, opt, aesthetic_clip_len, technical_num_clips, dev
 
 def extract_video_features(video, encoder, opt, temporal_samplers, use_aesthetic_features=False, device='cpu'):
     # Video preprocessing module
-    mean = torch.FloatTensor([123.675, 116.28, 103.53]).reshape(-1,1,1,1)
-    std = torch.FloatTensor([58.395, 57.12, 57.375]).reshape(-1,1,1,1)
+    mean = torch.FloatTensor([123.675, 116.28, 103.53]).to(device).reshape(-1,1,1,1)
+    std = torch.FloatTensor([58.395, 57.12, 57.375]).to(device).reshape(-1,1,1,1)
 
     sample_feature_type = {"technical": opt["inference"]["args"]["sample_types"]["technical"]}
-    video_data, frame_idx = spatial_temporal_view_decomposition(video, sample_feature_type, temporal_samplers)
+    video_data, frame_idx = spatial_temporal_view_decomposition(video, sample_feature_type, temporal_samplers, device=device)
 
     # Assuming that video_data is the preprocessed video from above step
     if use_aesthetic_features:
@@ -112,7 +114,7 @@ def extract_video_features(video, encoder, opt, temporal_samplers, use_aesthetic
 
 
 def spatial_temporal_view_decomposition(
-    vreader, sample_types, samplers, is_train=False, augment=False,
+    vreader, sample_types, samplers, is_train=False, augment=False, device='cpu'
 ):
     video = {}
 
@@ -128,7 +130,7 @@ def spatial_temporal_view_decomposition(
 
     for stype in samplers:
         imgs = [frame_dict[idx] for idx in frame_inds[stype]]
-        video[stype] = torch.stack(imgs, 0).permute(3, 0, 1, 2)
+        video[stype] = torch.stack(imgs, 0).to(device).permute(3, 0, 1, 2)
 
     sampled_video = {}
     for stype, sopt in sample_types.items():
@@ -139,8 +141,8 @@ def spatial_temporal_view_decomposition(
 
 # Define actual detection module to be used
 class VideoDetector():
-    def __init__(self, device='cpu') -> None:
-        self.frames = 256
+    def __init__(self, frames=64, device='cpu') -> None:
+        self.frames = frames
         self.device = torch.device(device)
         self.load_model()
 
@@ -162,7 +164,7 @@ class VideoDetector():
         )
 
     def process(self, video=None):
-        video = torch.Tensor(video)
+        video = torch.Tensor(video).to(self.device)
         features = self.feature_extraction(video)
         results = self.predict(features)
         return results
@@ -176,7 +178,8 @@ class VideoDetector():
             video_frames,
             self.visual_encoder,
             self.opt,
-            self.temporal_samplers
+            self.temporal_samplers,
+            device=self.device
         )
 
         time_features = time() - start
