@@ -17,7 +17,7 @@ pip install -e ExplainableVQA/open_clip
 ```
 On Linux:
 ```
-sed -i '92s/return x\[0\]/return x/' src/open_clip/modified_resnet.py
+sed -i '92s/return x\[0\]/return x/' ExplainableVQA/open_clip/src/open_clip/modified_resnet.py
 pip install -e ExplainableVQA/open_clip
 ```
 3. Install Dover:

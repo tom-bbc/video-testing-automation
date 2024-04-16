@@ -10,10 +10,10 @@ Object = lambda **kwargs: type("Object", (), kwargs)
 
 
 class AudioVisualDetector(AudioVisualProcessor):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, device='cpu', *args, **kwargs):
         super(AudioVisualDetector, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
-        self.video_detector = VideoDetector()
+        self.video_detector = VideoDetector(device=device)
 
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
