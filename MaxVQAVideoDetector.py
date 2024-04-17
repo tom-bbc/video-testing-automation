@@ -171,9 +171,6 @@ class VideoDetector():
 
     def feature_extraction(self, video_frames=None):
         # Extract features from test video
-        print("Extracting visual features from video...")
-        start = time()
-
         vis_feats, sampled_frames = extract_video_features(
             video_frames,
             self.visual_encoder,
@@ -182,16 +179,12 @@ class VideoDetector():
             device=self.device
         )
 
-        time_features = time() - start
-
         return vis_feats
 
     def predict(self, visual_features):
         # Run test video features through detection model
         combined_outputs = []
-        start = time()
 
-        print("Processing video with MaxVQA model...")
         with torch.no_grad():
             raw_outputs = self.maxvqa(
                 visual_features,
@@ -201,8 +194,5 @@ class VideoDetector():
             )
 
         combined_outputs.append(raw_outputs)
-        print(f"10) Final predictions: {np.array(raw_outputs).shape}")
-
-        time_predictions = time() - start
 
         return combined_outputs

@@ -80,19 +80,25 @@ if __name__ == '__main__':
         # Check if user wants to run detection algorithms, or just save av segments to disk
         if not detection_on:
             if audio_on and video_on:
-                processor = AudioVisualProcessor(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
+                    aws_access_key="ea749b0383ee4fc2a367c0f859fc1b68",
+                    aws_secret_key="38619fd506354a90ae58d2feaceb5824"
+                )
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                    video_module=video, video_frames=video_frame_queue, checkpoint_files=True
+                    video_module=video, video_frames=video_frame_queue,
+                    checkpoint_files=True, checkpoint_to_s3=False
                 )
             elif video_on:
                 processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
-                processor.process(video_module=video, video_frames=video_frame_queue, checkpoint_files=True)
+                processor.process(video_module=video, video_frames=video_frame_queue,
+                                  checkpoint_files=True, checkpoint_to_s3=False)
             elif audio_on:
                 processor = AudioVisualDetector()
                 processor.process(
-                    audio_module=audio, audio_frames=audio_frame_queue,
-                    audio_channels=1, checkpoint_files=True
+                    audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
+                    checkpoint_files=True, checkpoint_to_s3=False
                 )
             else:
                 exit(0)
@@ -100,24 +106,28 @@ if __name__ == '__main__':
         # Initialise and launch av detetion algorithms
         else:
             if audio_on and video_on:
-                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor = AudioVisualDetector(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
+                    video_downsample_frames=32, device='cpu'
+                )
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                     video_module=video, video_frames=video_frame_queue,
-                    audio_gap_detection=True, audio_click_detection=False,
                     checkpoint_files=save_av_files
                 )
             elif video_on:
-                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
+                processor = AudioVisualDetector(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
+                    video_downsample_frames=32, device='cpu'
+                )
                 processor.process(
                     video_module=video, video_frames=video_frame_queue,
                     checkpoint_files=save_av_files
                 )
             elif audio_on:
-                processor = AudioVisualDetector()
+                processor = AudioVisualDetector(device='cpu')
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                    audio_gap_detection=True, audio_click_detection=True,
                     checkpoint_files=save_av_files
                 )
             else:

@@ -1,24 +1,29 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from time import time as timer
+import math
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from itertools import cycle
+
 
 from AudioVisualProcessor import AudioVisualProcessor
 from EssentiaAudioDetector import AudioDetector
 from MaxVQAVideoDetector import VideoDetector
 
-
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
 class AudioVisualDetector(AudioVisualProcessor):
-    def __init__(self, device='cpu', *args, **kwargs):
+    def __init__(self, video_downsample_frames=64, device='cpu', *args, **kwargs):
         super(AudioVisualDetector, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
-        self.video_detector = VideoDetector(device=device)
+        self.video_detector = VideoDetector(frames=video_downsample_frames, device=device)
 
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
                 video_module=Object(stream_open=False, video_device=None), video_frames=[],
-                audio_gap_detection=True, audio_click_detection=True, checkpoint_files=False):
+                checkpoint_files=False):
 
         if audio_module.stream_open:
             print(f"         * Segment size           : {self.audio_buffer_len_f}")
@@ -40,13 +45,21 @@ class AudioVisualDetector(AudioVisualProcessor):
             # Audio processing module
             if len(audio_frames) >= self.audio_buffer_len_f:
                 audio_segment = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
-                self.audio_detection(audio_segment, audio_gap_detection, audio_click_detection)
+                results = self.audio_detection(
+                    audio_segment,
+                    plot=True,
+                    time_indexed_audio=True
+                )
                 self.audio_segment_index += 1
 
             # Video processing module
             if len(video_frames) >= self.video_buffer_len_f:
                 video_segment = self.collate_video_frames(video_frames, checkpoint_files)
-                self.video_detection(video_segment)
+                results = self.video_detection(
+                    video_segment,
+                    plot=True,
+                    time_indexed_video=True
+                )
                 self.video_segment_index += 1
 
         # Save all detection timestamps to CSV database
@@ -61,121 +74,156 @@ class AudioVisualDetector(AudioVisualProcessor):
         print(f"\nProcessing module ended.")
         print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
 
-    def audio_detection(self, audio_content, time_indexed_audio=True, detect_gaps=True, detect_clicks=True, plot=True):
-        if not time_indexed_audio:
-            detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
-                audio_content,
-                gap_detection=detect_gaps,
-                click_detection=detect_clicks
-            )
-
-            print(f"\n * Audio detection (segment {self.audio_segment_index}):")
-            print(f"     * Detected gap times         : {detected_audio_gaps}")
-            print(f"     * Detected click times       : {detected_audio_clicks}", end='\n\n')
-
-        else:
-            no_channels = audio_content[0][1].shape[0]
-            audio_y = np.array([[]] * no_channels)
-            time_x = []
-
+    def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=True, plot=False, start_time=0, end_time=0):
+        if time_indexed_audio:
+            audio = []
             for time, chunk in audio_content:
-                time_x.extend([time] * chunk.shape[1])
-                audio_y = np.append(audio_y, chunk, axis=1)
+                audio = np.append(audio, chunk, axis=1)
 
-            detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
-                audio_y,
-                start_time=audio_content[0][0],
-                gap_detection=detect_gaps,
-                click_detection=detect_clicks
-            )
+            start_time = audio_content[0][0]
+            end_time = audio_content[-1][0]
+        else:
+            audio = audio_content
 
-            print(f"\n * Audio detection (segment {self.audio_segment_index}):")
-            print(f"     * Segment time range         : {audio_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {audio_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-            print(f"     * Average amplitude          : {np.average(np.abs(audio_y)):.2f}")
-            print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S.%f')[:-4], e.strftime('%H:%M:%S.%f')[:-4]) for s, e in detected_audio_gaps]}")
-            print(f"     * Detected click times       : {[t.strftime('%H:%M:%S.%f')[:-4] for t in detected_audio_clicks]}")
+        detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
+            audio,
+            start_time=start_time,
+            gap_detection=detect_gaps,
+            click_detection=detect_clicks
+        )
 
-            # Plot audio signal and any detections
-            if plot:
-                # Setup
-                plt.rcParams['agg.path.chunksize'] = 1000
-                fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
+        print(f"\n * Audio detection (segment {self.audio_segment_index}):")
+        print(f"     * Segment time range         : {start_time.strftime('%H:%M:%S.%f')} => {end_time.strftime('%H:%M:%S.%f')}")
+        print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S'), e.strftime('%H:%M:%S')) for s, e in detected_audio_gaps]}")
+        print(f"     * Detected click times       : {detected_audio_clicks}")
 
-                # Plot L/R/Mono channels
-                for idx, audio_channel in enumerate(audio_y):
-                    time_index = np.linspace(0, len(time_x), len(time_x))
-                    axs.plot(time_index, audio_channel, color='k', alpha=0.5, linewidth=0.5, label=f"Channel {idx}")
+        # Plot audio signal and any detections
+        if plot:
+            self.plot_audio(audio, detected_audio_gaps, detected_audio_clicks, start_time, end_time)
+            print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
 
-                # Plot time range of any audio gaps
-                if len(detected_audio_gaps) > 0:
-                    for start, end in detected_audio_gaps:
-                        approx_gap_start = min(time_x, key=lambda dt: abs(dt - start))
-                        approx_gap_start_idx = time_x.index(approx_gap_start)
-                        approx_gap_end = min(time_x, key=lambda dt: abs(dt - end))
-                        approx_gap_end_idx = time_x.index(approx_gap_end)
-
-                        line = axs.axvspan(approx_gap_start_idx, approx_gap_end_idx, color='b', alpha=0.3)
-
-                    line.set_label('Detected gap')
-
-                # Plot time range of any click artefacts
-                if len(detected_audio_clicks) > 0:
-                    for time in detected_audio_clicks:
-                        approx_click_time = min(time_x, key=lambda dt: abs(dt - time))
-                        approx_click_idx = time_x.index(approx_click_time)
-                        line = axs.axvline(approx_click_idx, color='r', linewidth=1)
-
-                    line.set_label('Detected click')
-
-                axs.set_xticks(time_index[::44100])
-                axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::44100]])
-
-                plt.xlabel('Capture Time (H:M:S)')
-                plt.ylabel('Audio Sample')
-                plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n")
-                plt.legend(loc=1)
-                fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
-                plt.close(fig)
-
-                print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
-
+        print()
         return {"gaps": detected_audio_gaps, "clicks": detected_audio_clicks}
 
-    def video_detection(self, video_content, time_indexed_video=True, plot=True):
-        if not time_indexed_video:
-            # MaxVQA AI detection process
-            print(f"\n * Video detection (segment {self.video_segment_index}):")
-            vqa_values = self.video_detector.process(video_content)
-            print(vqa_values)
-        else:
-            # Detect average brightness
-            brightness = []
-            black_frame_detected = False
+    def plot_audio(self, audio_content, gap_times, click_times, startpoint, endpoint):
+        # Setup
+        plt.rcParams['agg.path.chunksize'] = 1000
+        fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
 
+        # Form timeline over clip
+        time_x = np.linspace(0, 1, len(audio_content[0])) * (endpoint - startpoint) + startpoint
+        time_index = np.linspace(0, len(audio_content[0]), len(audio_content[0]))
+
+        # Plot L/R/Mono channels
+        for idx, audio_channel in enumerate(audio_content):
+            axs.plot(time_index, audio_channel, color='k', alpha=0.5, linewidth=0.5, label=f"Channel {idx}")
+
+        # Plot time range of any audio gaps
+        if len(gap_times) > 0:
+            for start, end in gap_times:
+                approx_gap_start = min(time_x, key=lambda dt: abs(dt - start))
+                approx_gap_start_idx = np.where(time_x == approx_gap_start)[0][0]
+                approx_gap_end = min(time_x, key=lambda dt: abs(dt - end))
+                approx_gap_end_idx = np.where(time_x == approx_gap_end)[0][0]
+
+                line = axs.axvspan(approx_gap_start_idx, approx_gap_end_idx, color='b', alpha=0.3)
+
+            line.set_label('Detected gap')
+
+        # Plot time range of any click artefacts
+        if len(click_times) > 0:
+            for time in click_times:
+                approx_click_time = min(time_x, key=lambda dt: abs(dt - time))
+                approx_click_idx = np.where(time_x == approx_click_time)[0][0]
+                line = axs.axvline(approx_click_idx, color='r', linewidth=1)
+
+            line.set_label('Detected click')
+
+        axs.set_xticks(time_index[::self.audio_fps])
+        axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]], fontsize=12)
+        plt.yticks(fontsize=12)
+
+        plt.xlabel("\nCapture Time (H:M:S)", fontsize=14)
+        plt.ylabel("Audio Sample Amplitude", fontsize=14)
+        plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n", fontsize=18)
+        plt.legend(loc=1, fontsize=14)
+        fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
+        plt.close(fig)
+
+    def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0):
+        if time_indexed_video:
+            video = []
             for time, frame in video_content:
-                average_brightness = np.average(np.linalg.norm(frame, axis=2)) / np.sqrt(3)
-                brightness.append(average_brightness)
-                if average_brightness < 10: black_frame_detected = True
+                video = np.append(video, frame, axis=1)
 
-            print(f"\n * Video detection (segment {self.video_segment_index}):")
-            print(f"     * Segment time range         : {video_content[0][0].strftime('%H:%M:%S.%f')[:-4]} => {video_content[-1][0].strftime('%H:%M:%S.%f')[:-4]}")
-            print(f"     * Average brightness         : {np.average(brightness):.2f}")
-            print(f"     * Black frame detected       : {black_frame_detected}")
+            start_time = video_content[0][0]
+            end_time = video_content[-1][0]
+        else:
+            video = video_content
 
-            if plot:
-                fig = plt.figure(figsize=(10, 7), tight_layout=True)
-                axs = fig.add_subplot(111)
+        # MaxVQA AI detection process
+        print(f"\n * Video detection (segment {self.video_segment_index}):")
+        processing_time_start = timer()
+        score_per_patch = self.video_detector.process(video_content)
+        processing_time_end = timer() - processing_time_start
 
-                axs.plot(brightness, linewidth=1)
-                plt.xlabel('Capture Time (H:M:S)')
-                plt.ylabel('Average Brightness')
-                plt.xticks(
-                    ticks=range(0, len(video_content), 30),
-                    labels=[f[0].strftime('%H:%M:%S.%f')[:-4] for f in video_content[::30]],
-                    rotation=-90
-                )
-                plt.title(f"Video Defect Detection: Segment {self.video_segment_index} ({video_content[0][0].strftime('%H:%M:%S')} => {video_content[-1][0].strftime('%H:%M:%S')})")
-                fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
-                plt.close(fig)
+        local_scores = np.mean(score_per_patch, axis=0)
+        global_scores = np.mean(local_scores, axis=1)
+        output = local_scores
 
-                print(f"     * Plot generated             : 'video-plot-{self.video_segment_index}.png'")
+        print(f"     * Global VQA scores  : {[f'{i}: {int(s)}' for i, s in enumerate(global_scores)]}")
+        print(f"     * Processing time    : {processing_time_end:.2f}s")
+
+        if plot:
+            self.plot_local_vqa(local_scores, start_time, end_time)
+            print(f"     * Plot generated : 'video-plot-{self.video_segment_index}.png'")
+
+        print()
+        return output
+
+    def plot_local_vqa(self, vqa_values, startpoint=0, endpoint=0):
+        # Metrics
+        priority_metrics = [7, 9, 11, 13, 14]
+        plot_values = vqa_values[priority_metrics]
+        titles = {
+            "A": "Sharpness",
+            "B": "Noise",
+            "C": "Flicker",
+            "D": "Compression artefacts",
+            "E": "Motion fluency"
+        }
+
+        # Timestamps
+        time_x = np.linspace(0, 1, len(plot_values[0])) * (endpoint - startpoint) + startpoint
+        time_index = np.linspace(0, len(plot_values[0]), len(plot_values[0]))
+
+        cycol = cycle(mcolors.TABLEAU_COLORS)
+        fig, axes = plt.subplot_mosaic("AB;CD;EE", sharex=True, sharey=True, figsize=(12, 9), tight_layout=True)
+
+        for value_id, (ax_id, title) in enumerate(titles.items()):
+            mean_over_video = plot_values[value_id].mean()
+            std_over_video = plot_values[value_id].std()
+
+            axes[ax_id].set_title(title)
+            axes[ax_id].grid(linewidth=0.2)
+
+            axes[ax_id].axhline(mean_over_video, color='black', ls='--', linewidth=0.5)
+            axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5)
+            axes[ax_id].plot(time_index, plot_values[value_id], linewidth=1, color=next(cycol))
+
+        fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')}))", fontsize=16)
+        fig.supylabel("Absolute score (0-1, bad-good)")
+        plt.yticks([0, 0.25, 0.5, 0.75, 1])
+
+        fig.supxlabel("Capture Time (H:M:S)")
+        num_ticks = round(len(plot_values[0])/10)
+        plt.xticks(
+            ticks=time_index[::num_ticks],
+            labels=[t.strftime('%H:%M:%S') for t in time_x[::num_ticks]]
+        )
+
+        for ax in fig.get_axes():
+            ax.label_outer()
+
+        fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+        plt.close(fig)
