@@ -28,11 +28,9 @@ class CloudDetector(AudioVisualDetector):
 
         if location ==  's3':
             # Get list of AV files that currently are held in s3
-            paths = self.get_s3_paths(audio_detection, video_detection)
-            audio_segment_paths, video_segment_paths = paths["audio"], paths["video"]
+            audio_segment_paths, video_segment_paths = self.get_s3_paths(audio_detection, video_detection)
         else:
-            audio_segment_paths = glob.glob("./output/data/*.wav")
-            video_segment_paths = glob.glob("./output/data/*.mp4")
+            audio_segment_paths, video_segment_paths = self.get_local_paths(audio_detection, video_detection)
 
         # Cycle through each AV file running detection algorithms
         for index in range(max(len(audio_segment_paths), len(video_segment_paths))):
@@ -46,7 +44,7 @@ class CloudDetector(AudioVisualDetector):
                     audio_segment = self.get_local_audio(audio_path)
 
                 timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
-                print(f"New audio segment: {audio_path} {audio_segment.shape}")
+                print(f"New audio segment: {audio_path.split('/')[-1]} {audio_segment.shape}")
 
                 results = self.audio_detection(
                     audio_segment,
@@ -66,7 +64,7 @@ class CloudDetector(AudioVisualDetector):
                     video_segment = self.get_local_video(video_path)
 
                 timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
-                print(f"New video segment: {video_path} {video_segment.shape}")
+                print(f"New video segment: {video_path.split('/')[-1]} {video_segment.shape}")
 
                 results = self.video_detection(
                     video_segment,
@@ -78,7 +76,7 @@ class CloudDetector(AudioVisualDetector):
 
     def get_s3_paths(self, audio_detection=True, video_detection=True):
         sort_by_modified_date = lambda obj: int(obj['LastModified'].strftime('%s'))
-        filenames = {"audio": [], "video": []}
+        audio_filenames, video_filenames = [], []
 
         # Get most recent audio segment files
         if audio_detection:
@@ -87,7 +85,6 @@ class CloudDetector(AudioVisualDetector):
             if response['KeyCount'] > 0:
                 objects = response['Contents']
                 audio_filenames = [obj['Key'] for obj in sorted(objects, key=sort_by_modified_date)]
-                filenames["audio"] = audio_filenames
 
         # Get most recent video segment files
         if video_detection:
@@ -96,9 +93,22 @@ class CloudDetector(AudioVisualDetector):
             if response['KeyCount'] > 0:
                 objects = response['Contents']
                 video_filenames = [obj['Key'] for obj in sorted(objects, key=sort_by_modified_date)]
-                filenames["video"] = video_filenames
 
-        return filenames
+        return audio_filenames, video_filenames
+
+    def get_local_paths(self, audio_detection=True, video_detection=True, dir="./output/data/"):
+        sort_by_index = lambda path: int(path.split('/')[-1].split('_')[0][3:])
+        audio_filenames, video_filenames = [], []
+
+        if audio_detection:
+            audio_filenames = glob.glob(f"{dir}*.wav")
+            audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
+
+        if video_detection:
+            video_filenames = glob.glob(f"{dir}*.mp4")
+            video_filenames = list(sorted(video_filenames, key=sort_by_index))
+
+        return audio_filenames, video_filenames
 
     def get_s3_audio(self, filename, delete_remote=False):
         # Retrieve and decode wav file from s3

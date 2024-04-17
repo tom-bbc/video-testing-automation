@@ -171,7 +171,7 @@ class AudioVisualDetector(AudioVisualProcessor):
         global_scores = np.mean(local_scores, axis=1)
         output = local_scores
 
-        print(f"     * Global VQA scores  : {[f'{i}: {int(s)}' for i, s in enumerate(global_scores)]}")
+        print(f"     * Global VQA scores  : {[f'{i}: {s:.2f}' for i, s in enumerate(global_scores)]}")
         print(f"     * Processing time    : {processing_time_end:.2f}s")
 
         if plot:
