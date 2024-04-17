@@ -1,9 +1,12 @@
 import numpy as np
 import wave
-import time
+from datetime import datetime
 import boto3
 import cv2
 import os
+
+import glob
+from scipy.io import wavfile
 
 from AudioVisualDetector import AudioVisualDetector
 
@@ -20,35 +23,60 @@ class CloudDetector(AudioVisualDetector):
             endpoint_url="https://object.lon1.bbcis.uk"
         )
 
-    def process(self, audio_detection=True, video_detection=True):
-        # Get list of AV files that currently are held in s3
-        paths = self.get_av_filenames(audio_detection, video_detection)
-        audio_segment_paths, video_segment_paths = paths["audio"], paths["video"]
+    def process(self, audio_detection=True, video_detection=True, location='local'):
+        print(f"AV file locations: {location}")
 
-        # if len(audio_segment_paths) == 0 and len(video_segment_paths) == 0:
-        #     time.sleep(5)
+        if location ==  's3':
+            # Get list of AV files that currently are held in s3
+            paths = self.get_s3_paths(audio_detection, video_detection)
+            audio_segment_paths, video_segment_paths = paths["audio"], paths["video"]
+        else:
+            audio_segment_paths = glob.glob("./output/data/*.wav")
+            video_segment_paths = glob.glob("./output/data/*.mp4")
 
         # Cycle through each AV file running detection algorithms
         for index in range(max(len(audio_segment_paths), len(video_segment_paths))):
             # Run audio detection
             if audio_detection and index < len(audio_segment_paths):
                 audio_path = audio_segment_paths[index]
-                audio_segment = self.get_s3_audio(audio_path)
+
+                if location == 's3':
+                    audio_segment = self.get_s3_audio(audio_path)
+                else:
+                    audio_segment = self.get_local_audio(audio_path)
+
+                timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
                 print(f"New audio segment: {audio_path} {audio_segment.shape}")
 
-                results = self.audio_detection(audio_segment, time_indexed_audio=False, plot=False)
+                results = self.audio_detection(
+                    audio_segment,
+                    plot=True,
+                    start_time=timestamps[0],
+                    end_time=timestamps[-1]
+                )
                 self.audio_segment_index += 1
 
             # Run video detection
             if video_detection and index < len(video_segment_paths):
                 video_path = video_segment_paths[index]
-                video_segment = self.get_s3_video(video_path)
+
+                if location == 's3':
+                    video_segment = self.get_s3_video(video_path)
+                else:
+                    video_segment = self.get_local_video(video_path)
+
+                timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
                 print(f"New video segment: {video_path} {video_segment.shape}")
 
-                results = self.video_detection(video_segment, time_indexed_video=False, plot=False)
+                results = self.video_detection(
+                    video_segment,
+                    plot=True,
+                    start_time=timestamps[0],
+                    end_time=timestamps[-1]
+                )
                 self.video_segment_index += 1
 
-    def get_av_filenames(self, audio_detection=True, video_detection=True):
+    def get_s3_paths(self, audio_detection=True, video_detection=True):
         sort_by_modified_date = lambda obj: int(obj['LastModified'].strftime('%s'))
         filenames = {"audio": [], "video": []}
 
@@ -59,8 +87,6 @@ class CloudDetector(AudioVisualDetector):
             if response['KeyCount'] > 0:
                 objects = response['Contents']
                 audio_filenames = [obj['Key'] for obj in sorted(objects, key=sort_by_modified_date)]
-                # for i, name in enumerate(audio_filenames):
-                #     print(f"{i}. {name}")
                 filenames["audio"] = audio_filenames
 
         # Get most recent video segment files
@@ -70,13 +96,11 @@ class CloudDetector(AudioVisualDetector):
             if response['KeyCount'] > 0:
                 objects = response['Contents']
                 video_filenames = [obj['Key'] for obj in sorted(objects, key=sort_by_modified_date)]
-                # for i, name in enumerate(video_filenames):
-                #     print(f"{i}. {name}")
                 filenames["video"] = video_filenames
 
         return filenames
 
-    def get_s3_audio(self, filename, delete_remote=False, save_locally=False):
+    def get_s3_audio(self, filename, delete_remote=False):
         # Retrieve and decode wav file from s3
         obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=filename)
         byte_data = obj['Body'].read()
@@ -87,18 +111,21 @@ class CloudDetector(AudioVisualDetector):
         if delete_remote:
             self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
 
-        # TEST: save wav file
-        if save_locally:
-            wav_file = wave.open(os.path.basename(filename), 'wb')
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(44100)
-            wav_file.writeframes(b''.join(audio_asset))
-            wav_file.close()
+        return audio_asset
+
+    def get_local_audio(self, filename):
+        # Retrieve and decode wav file from local storage
+        samplerate, audio_asset = wavfile.read(filename)
+
+        if len(audio_asset.shape) < 2:
+            audio_asset = np.expand_dims(audio_asset, axis=0)
+
+        no_channels = audio_asset.shape[1]
+        length = audio_asset.shape[0] / samplerate
 
         return audio_asset
 
-    def get_s3_video(self, filename, delete_remote=False, save_locally=False):
+    def get_s3_video(self, filename, delete_remote=False):
         # Retrieve and decode mp4 file from s3
         video_url = self.s3_client.generate_presigned_url(
             ClientMethod='get_object',
@@ -121,19 +148,21 @@ class CloudDetector(AudioVisualDetector):
         if delete_remote:
             self.s3_client.delete_object(Bucket=self.s3_bucket, Key=filename)
 
-        # TEST: save mp4 file
-        if save_locally:
-            output_file = cv2.VideoWriter(
-                f"test-video-file.mp4",
-                cv2.VideoWriter_fourcc(*'mp4v'),
-                video_source.get(cv2.CAP_PROP_FPS),
-                (int(video_source.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video_source.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-            )
+        return video_asset
 
-            for f in video_asset:
-                output_file.write(f)
+    def get_local_video(self, filename):
+        # Retrieve and decode mp4 file from local storage
+        video_source = cv2.VideoCapture(filename)
+        frame_buffer = []
+        success = True
 
-            output_file.release()
+        while success:
+            # Read video frame-by-frame from the opencv capture object; img is (H, W, C)
+            success, frame = video_source.read()
+            if success:
+                frame_buffer.append(frame)
+
+        video_asset = np.stack(frame_buffer, axis=0)  # dimensions (T, H, W, C)
 
         return video_asset
 
@@ -142,5 +171,5 @@ if __name__ == '__main__':
     aws_access_key = "ea749b0383ee4fc2a367c0f859fc1b68"
     aws_secret_key = "38619fd506354a90ae58d2feaceb5824"
 
-    detector = CloudDetector(aws_access_key, aws_secret_key, device='cuda')
-    detector.process(video_detection=False)
+    detector = CloudDetector(aws_access_key, aws_secret_key, video_downsample_frames=192, device='cpu')
+    detector.process()
