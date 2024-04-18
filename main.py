@@ -81,24 +81,26 @@ if __name__ == '__main__':
         if not detection_on:
             if audio_on and video_on:
                 processor = AudioVisualProcessor(
-                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
-                    aws_access_key="ea749b0383ee4fc2a367c0f859fc1b68",
-                    aws_secret_key="38619fd506354a90ae58d2feaceb5824"
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height)
                 )
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                     video_module=video, video_frames=video_frame_queue,
-                    checkpoint_files=True, checkpoint_to_s3=False
+                    checkpoint_files=True
                 )
             elif video_on:
-                processor = AudioVisualDetector(video_fps=video.frame_rate, video_shape=(video.width, video.height))
-                processor.process(video_module=video, video_frames=video_frame_queue,
-                                  checkpoint_files=True, checkpoint_to_s3=False)
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height)
+                )
+                processor.process(
+                    video_module=video, video_frames=video_frame_queue,
+                    checkpoint_files=True
+                )
             elif audio_on:
-                processor = AudioVisualDetector()
+                processor = AudioVisualProcessor()
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                    checkpoint_files=True, checkpoint_to_s3=False
+                    checkpoint_files=True
                 )
             else:
                 exit(0)
