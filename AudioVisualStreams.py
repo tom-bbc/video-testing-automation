@@ -47,14 +47,21 @@ class AudioStream():
 
 
 class VideoStream():
-    def __init__(self, device=0):
+    def __init__(self, device=0, aspect_ratio_x=1280, aspect_ratio_y=720):
         # Define a video capture object
         self.video_device = device
         self.video_stream = cv2.VideoCapture(self.video_device)
+
+        self.video_stream.set(cv2.CAP_PROP_FRAME_WIDTH, aspect_ratio_x)
+        self.video_stream.set(cv2.CAP_PROP_FRAME_HEIGHT, aspect_ratio_y)
+
         self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
-        self.width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.stream_open = False
+
+        # self.width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
+        # self.height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.width = aspect_ratio_x
+        self.height = aspect_ratio_y
 
     def launch(self, frame_queue=None, display_stream=False):
         self.stream_open = True
