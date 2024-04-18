@@ -181,5 +181,5 @@ if __name__ == '__main__':
     aws_access_key = "ea749b0383ee4fc2a367c0f859fc1b68"
     aws_secret_key = "38619fd506354a90ae58d2feaceb5824"
 
-    detector = CloudDetector(aws_access_key, aws_secret_key, video_downsample_frames=192, device='cpu')
+    detector = CloudDetector(aws_access_key, aws_secret_key, video_downsample_frames=256, device='cpu')
     detector.process()
