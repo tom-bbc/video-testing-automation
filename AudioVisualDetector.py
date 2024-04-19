@@ -176,7 +176,7 @@ class AudioVisualDetector(AudioVisualProcessor):
         global_scores = np.mean(local_scores, axis=1)
         output = local_scores
 
-        print(f"     * Global VQA scores  : {[f'{i}: {s:.2f}' for i, s in enumerate(global_scores)]}")
+        print(f"     * Global VQA scores  : {np.array([f'{i}: {s:.2f}' for i, s in enumerate(global_scores)], dtype=str)}")
         print(f"     * Processing time    : {processing_time_end:.2f}s")
 
         if plot:
@@ -217,13 +217,12 @@ class AudioVisualDetector(AudioVisualProcessor):
             axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5)
 
             if plot_with_timestamps:
-                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.5, color=next(cycol))
+                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(cycol))
             else:
-                axes[ax_id].plot(plot_values[value_id], linewidth=0.5, color=next(cycol))
+                axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(cycol))
 
         if plot_with_timestamps:
-            fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')}))", fontsize=16)
-
+            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
             num_ticks = round(len(plot_values[0])/10)
             plt.xticks(
@@ -231,7 +230,7 @@ class AudioVisualDetector(AudioVisualProcessor):
                 labels=[t.strftime('%H:%M:%S') for t in time_x[::num_ticks]]
             )
         else:
-            fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index}", fontsize=16)
+            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index}", fontsize=16)
             fig.supxlabel("Capture Frame")
 
         fig.supylabel("Absolute score (0-1, bad-good)")
