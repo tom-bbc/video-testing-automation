@@ -5,7 +5,7 @@ import math
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
-
+from datetime import datetime
 
 from AudioVisualProcessor import AudioVisualProcessor
 from EssentiaAudioDetector import AudioDetector
@@ -180,12 +180,12 @@ class AudioVisualDetector(AudioVisualProcessor):
         print(f"     * Processing time    : {processing_time_end:.2f}s")
 
         if plot:
-            self.plot_local_vqa(local_scores, start_time, end_time)
+            self.plot_local_vqa(local_scores, startpoint=start_time, endpoint=end_time)
 
         print()
         return output
 
-    def plot_local_vqa(self, vqa_values, startpoint=0, endpoint=0, output_file=''):
+    def plot_local_vqa(self, vqa_values, true_timestamps=None, startpoint=0, endpoint=0, output_file=''):
         # Metrics
         priority_metrics = [7, 9, 11, 13, 14]
         plot_values = vqa_values[priority_metrics]
@@ -207,6 +207,20 @@ class AudioVisualDetector(AudioVisualProcessor):
         fig, axes = plt.subplot_mosaic("AB;CD;EE", sharex=True, sharey=True, figsize=(12, 9), tight_layout=True)
 
         for value_id, (ax_id, title) in enumerate(titles.items()):
+            # Plot true values of known video defect times if they exist
+            if plot_with_timestamps and true_timestamps is not None:
+                for times in true_timestamps:
+                    start = datetime.strptime(times[0], '%H:%M:%S')
+                    approx_start = min(time_x, key=lambda dt: abs(dt - start))
+                    approx_start_idx = np.where(time_x == approx_start)[0][0]
+
+                    end = datetime.strptime(times[-1], '%H:%M:%S')
+                    approx_end = min(time_x, key=lambda dt: abs(dt - end))
+                    approx_end_idx = np.where(time_x == approx_end)[0][0]
+
+                    axes[ax_id].axvspan(approx_start_idx, approx_end_idx, facecolor='r', alpha=0.2)
+
+            # Plot mean and twice standard deviation of VQA scores of each metric
             mean_over_video = plot_values[value_id].mean()
             std_over_video = plot_values[value_id].std()
 
@@ -216,11 +230,13 @@ class AudioVisualDetector(AudioVisualProcessor):
             axes[ax_id].axhline(mean_over_video, color='black', ls='--', linewidth=0.5)
             axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5)
 
+            # Plot VQA scores themselves
             if plot_with_timestamps:
                 axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(cycol))
             else:
                 axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(cycol))
 
+        # Format title and axes labels
         if plot_with_timestamps:
             fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
@@ -239,6 +255,7 @@ class AudioVisualDetector(AudioVisualProcessor):
         for ax in fig.get_axes():
             ax.label_outer()
 
+        # Save plot to file
         if output_file == '':
             fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
         else:
