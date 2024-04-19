@@ -150,7 +150,7 @@ class AudioVisualDetector(AudioVisualProcessor):
         fig.savefig(f"output/plots/audio-plot-{self.audio_segment_index}.png")
         plt.close(fig)
 
-    def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0):
+    def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0, epochs=1):
         if time_indexed_video:
             video = []
             for time, frame in video_content:
@@ -163,10 +163,15 @@ class AudioVisualDetector(AudioVisualProcessor):
 
         # MaxVQA AI detection process
         print(f"\n * Video detection (segment {self.video_segment_index}):")
-        processing_time_start = timer()
-        score_per_patch = self.video_detector.process(video_content)
-        processing_time_end = timer() - processing_time_start
 
+        processing_time_start = timer()
+        scores = np.zeros(shape=(epochs,), dtype=object)
+        for i in range(epochs):
+            score_per_patch = self.video_detector.process(video_content)
+            scores[i] = np.array(score_per_patch)
+
+        processing_time_end = timer() - processing_time_start
+        score_per_patch = np.mean(scores, axis=0)
         local_scores = np.mean(score_per_patch, axis=0)
         global_scores = np.mean(local_scores, axis=1)
         output = local_scores
@@ -176,12 +181,11 @@ class AudioVisualDetector(AudioVisualProcessor):
 
         if plot:
             self.plot_local_vqa(local_scores, start_time, end_time)
-            print(f"     * Plot generated : 'video-plot-{self.video_segment_index}.png'")
 
         print()
         return output
 
-    def plot_local_vqa(self, vqa_values, startpoint=0, endpoint=0):
+    def plot_local_vqa(self, vqa_values, startpoint=0, endpoint=0, output_file=''):
         # Metrics
         priority_metrics = [7, 9, 11, 13, 14]
         plot_values = vqa_values[priority_metrics]
@@ -194,8 +198,10 @@ class AudioVisualDetector(AudioVisualProcessor):
         }
 
         # Timestamps
-        time_x = np.linspace(0, 1, len(plot_values[0])) * (endpoint - startpoint) + startpoint
-        time_index = np.linspace(0, len(plot_values[0]), len(plot_values[0]))
+        plot_with_timestamps = startpoint != 0 and endpoint != 0
+        if plot_with_timestamps:
+            time_x = np.linspace(0, 1, len(plot_values[0])) * (endpoint - startpoint) + startpoint
+            time_index = np.linspace(0, len(plot_values[0]), len(plot_values[0]))
 
         cycol = cycle(mcolors.TABLEAU_COLORS)
         fig, axes = plt.subplot_mosaic("AB;CD;EE", sharex=True, sharey=True, figsize=(12, 9), tight_layout=True)
@@ -209,21 +215,35 @@ class AudioVisualDetector(AudioVisualProcessor):
 
             axes[ax_id].axhline(mean_over_video, color='black', ls='--', linewidth=0.5)
             axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5)
-            axes[ax_id].plot(time_index, plot_values[value_id], linewidth=1, color=next(cycol))
 
-        fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')}))", fontsize=16)
+            if plot_with_timestamps:
+                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.5, color=next(cycol))
+            else:
+                axes[ax_id].plot(plot_values[value_id], linewidth=0.5, color=next(cycol))
+
+        if plot_with_timestamps:
+            fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')}))", fontsize=16)
+
+            fig.supxlabel("Capture Time (H:M:S)")
+            num_ticks = round(len(plot_values[0])/10)
+            plt.xticks(
+                ticks=time_index[::num_ticks],
+                labels=[t.strftime('%H:%M:%S') for t in time_x[::num_ticks]]
+            )
+        else:
+            fig.suptitle(f"Video Defect Detection (MaxVQA): Segment {self.video_segment_index}", fontsize=16)
+            fig.supxlabel("Capture Frame")
+
         fig.supylabel("Absolute score (0-1, bad-good)")
         plt.yticks([0, 0.25, 0.5, 0.75, 1])
-
-        fig.supxlabel("Capture Time (H:M:S)")
-        num_ticks = round(len(plot_values[0])/10)
-        plt.xticks(
-            ticks=time_index[::num_ticks],
-            labels=[t.strftime('%H:%M:%S') for t in time_x[::num_ticks]]
-        )
 
         for ax in fig.get_axes():
             ax.label_outer()
 
-        fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+        if output_file == '':
+            fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+        else:
+            fig.savefig(f"output/plots/{output_file}")
+
+        print(f"     * Plot generated     : {f'video-plot-{self.video_segment_index}.png' if output_file == '' else output_file}")
         plt.close(fig)

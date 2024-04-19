@@ -28,10 +28,9 @@ def run(video_path, output_path, num_stutters, max_stutter_length=1, min_stutter
             stutter_length_frames = round(fps * stutter_length_seconds)
 
             # print(f"Stutter frame           : {f_idx}")
-            # print(f"Stutter start timestamp : {timedelta(seconds=math.floor(f_idx / fps))}")
-            # print(f"Stutter end timestamp   : {timedelta(seconds=math.ceil((f_idx / fps) + stutter_length_seconds))}")
-            # print(f"Stutter length          : {stutter_length_seconds}s", end='\n\n')
-            print(f"{str(timedelta(seconds=math.floor(f_idx / fps)))[2:]}   {str(timedelta(seconds=math.floor(f_idx / fps) + stutter_length_seconds))[2:]}   {stutter_length_seconds}")
+            print(f"Stutter start timestamp : {timedelta(seconds=math.floor(f_idx / fps))}")
+            print(f"Stutter end timestamp   : {timedelta(seconds=math.ceil((f_idx / fps) + stutter_length_seconds))}")
+            print(f"Stutter length          : {stutter_length_seconds}s", end='\n\n')
 
             # Write same repeated frame to video for entirety of stutter
             for _ in range(stutter_length_frames):

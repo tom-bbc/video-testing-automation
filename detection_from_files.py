@@ -4,7 +4,7 @@ from datetime import datetime
 import boto3
 import cv2
 import os
-
+import math
 import glob
 from scipy.io import wavfile
 
@@ -22,15 +22,31 @@ class CloudDetector(AudioVisualDetector):
             aws_secret_access_key=aws_secret_key,
             endpoint_url="https://object.lon1.bbcis.uk"
         )
+        self.audio_detection_results = []
+        self.video_detection_results = np.array([[]]*16)
 
-    def process(self, audio_detection=True, video_detection=True, location='local'):
-        print(f"AV file locations: {location}")
+    def process(self, audio_detection=True, video_detection=True, location='local:./output/data/', plot=True, time_indexed_files=True):
+        print(f"\nAV file locations: {location}")
+        location_type, directory_path = location.split(':')
 
-        if location ==  's3':
+        if location_type ==  's3':
             # Get list of AV files that currently are held in s3
             audio_segment_paths, video_segment_paths = self.get_s3_paths(audio_detection, video_detection)
+        elif os.path.isfile(directory_path):
+            # Permits running on single input file
+            if directory_path.endswith(".mp4"):
+                video_segment_paths = [directory_path]
+                audio_segment_paths = []
+            elif directory_path.endswith(".wav"):
+                audio_segment_paths = [directory_path]
+                video_segment_paths = []
+            else:
+                exit(1)
+        elif os.path.isdir(directory_path):
+            # Gets list of AV files from local directory
+            audio_segment_paths, video_segment_paths = self.get_local_paths(audio_detection, video_detection, dir=directory_path)
         else:
-            audio_segment_paths, video_segment_paths = self.get_local_paths(audio_detection, video_detection)
+            exit(1)
 
         # Cycle through each AV file running detection algorithms
         for index in range(max(len(audio_segment_paths), len(video_segment_paths))):
@@ -38,20 +54,28 @@ class CloudDetector(AudioVisualDetector):
             if audio_detection and index < len(audio_segment_paths):
                 audio_path = audio_segment_paths[index]
 
-                if location == 's3':
+                if location_type == 's3':
                     audio_segment = self.get_s3_audio(audio_path)
                 else:
                     audio_segment = self.get_local_audio(audio_path)
 
-                timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
                 print(f"New audio segment: {audio_path.split('/')[-1]} {audio_segment.shape}")
 
-                results = self.audio_detection(
-                    audio_segment,
-                    plot=True,
-                    start_time=timestamps[0],
-                    end_time=timestamps[-1]
-                )
+                if time_indexed_files:
+                    timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
+
+                    results = self.audio_detection(
+                        audio_segment,
+                        plot=plot,
+                        start_time=timestamps[0],
+                        end_time=timestamps[-1]
+                    )
+                else:
+                    results = self.audio_detection(
+                        audio_segment,
+                        plot=plot
+                    )
+
                 self.audio_segment_index += 1
 
             # Run video detection
@@ -63,16 +87,36 @@ class CloudDetector(AudioVisualDetector):
                 else:
                     video_segment = self.get_local_video(video_path)
 
-                timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
                 print(f"New video segment: {video_path.split('/')[-1]} {video_segment.shape}")
 
-                results = self.video_detection(
-                    video_segment,
-                    plot=True,
-                    start_time=timestamps[0],
-                    end_time=timestamps[-1]
-                )
+                if time_indexed_files:
+                    timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
+
+                    results = self.video_detection(
+                        video_segment,
+                        plot=plot,
+                        start_time=timestamps[0],
+                        end_time=timestamps[-1]
+                    )
+                    # print(f" * Video detection results: {results.shape}")
+                else:
+                    results = self.video_detection(
+                        video_segment,
+                        plot=plot
+                    )
+
+                # Add local detection results to global results timeline (compensating for segment overlap)
+                self.video_detection_results = np.append(self.video_detection_results, results[:, :math.ceil(results.shape[1] * 0.9)], axis=1)
                 self.video_segment_index += 1
+
+        # Plot global video detection results over all clips in timeline
+        global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[-1], '%H:%M:%S.%f')
+        global_end_time = timestamps[-1]
+        self.plot_local_vqa(
+            self.video_detection_results,
+            startpoint=global_start_time, endpoint=global_end_time,
+            output_file="full-video-timeline.png"
+        )
 
     def get_s3_paths(self, audio_detection=True, video_detection=True):
         sort_by_modified_date = lambda obj: int(obj['LastModified'].strftime('%s'))
@@ -181,5 +225,11 @@ if __name__ == '__main__':
     aws_access_key = "ea749b0383ee4fc2a367c0f859fc1b68"
     aws_secret_key = "38619fd506354a90ae58d2feaceb5824"
 
-    detector = CloudDetector(aws_access_key, aws_secret_key, video_downsample_frames=256, device='cpu')
-    detector.process()
+    detector = CloudDetector(
+        aws_access_key, aws_secret_key,
+        video_downsample_frames=64, device='cpu'
+    )
+    detector.process(
+        location="local:output/data/rugby/stutter/",
+        time_indexed_files=True
+    )
