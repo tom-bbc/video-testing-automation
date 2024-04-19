@@ -25,7 +25,7 @@ class CloudDetector(AudioVisualDetector):
         self.audio_detection_results = []
         self.video_detection_results = np.array([[]]*16)
 
-    def process(self, audio_detection=True, video_detection=True, location='local:./output/data/', plot=True, time_indexed_files=True):
+    def process(self, audio_detection=True, video_detection=True, location='local:./output/data/', plot=True, time_indexed_files=True, inference_epochs=1):
         print(f"\nAV file locations: {location}")
         location_type, directory_path = location.split(':')
 
@@ -96,13 +96,15 @@ class CloudDetector(AudioVisualDetector):
                         video_segment,
                         plot=plot,
                         start_time=timestamps[0],
-                        end_time=timestamps[-1]
+                        end_time=timestamps[-1],
+                        epochs=inference_epochs
                     )
                     # print(f" * Video detection results: {results.shape}")
                 else:
                     results = self.video_detection(
                         video_segment,
-                        plot=plot
+                        plot=plot,
+                        epochs=inference_epochs
                     )
 
                 # Add local detection results to global results timeline (compensating for segment overlap)
@@ -110,12 +112,13 @@ class CloudDetector(AudioVisualDetector):
                 self.video_segment_index += 1
 
         # Plot global video detection results over all clips in timeline
-        global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[-1], '%H:%M:%S.%f')
+        global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[1], '%H:%M:%S.%f')
         global_end_time = timestamps[-1]
+        print(f"Full timeline: {global_start_time} => {global_end_time}")
         self.plot_local_vqa(
             self.video_detection_results,
             startpoint=global_start_time, endpoint=global_end_time,
-            output_file="full-video-timeline.png"
+            output_file="video-timeline.png"
         )
 
     def get_s3_paths(self, audio_detection=True, video_detection=True):
@@ -227,9 +230,10 @@ if __name__ == '__main__':
 
     detector = CloudDetector(
         aws_access_key, aws_secret_key,
-        video_downsample_frames=64, device='cpu'
+        video_downsample_frames=256, device='cpu'
     )
     detector.process(
-        location="local:output/data/rugby/stutter/",
-        time_indexed_files=True
+        location="local:output/data/rugby-crop/stutter/",
+        time_indexed_files=True,
+        inference_epochs=3
     )
