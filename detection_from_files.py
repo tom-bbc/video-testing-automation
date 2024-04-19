@@ -4,6 +4,7 @@ from datetime import datetime
 import boto3
 import cv2
 import os
+import json
 import math
 import glob
 from scipy.io import wavfile
@@ -25,7 +26,7 @@ class CloudDetector(AudioVisualDetector):
         self.audio_detection_results = []
         self.video_detection_results = np.array([[]]*16)
 
-    def process(self, audio_detection=True, video_detection=True, location='local:./output/data/', plot=True, time_indexed_files=True, inference_epochs=1):
+    def process(self, truth=None, audio_detection=True, video_detection=True, location='local:./output/data/', plot=True, time_indexed_files=True, inference_epochs=1):
         print(f"\nAV file locations: {location}")
         location_type, directory_path = location.split(':')
 
@@ -117,6 +118,7 @@ class CloudDetector(AudioVisualDetector):
         print(f"Full timeline: {global_start_time} => {global_end_time}")
         self.plot_local_vqa(
             self.video_detection_results,
+            true_timestamps=truth,
             startpoint=global_start_time, endpoint=global_end_time,
             output_file="video-timeline.png"
         )
@@ -228,12 +230,17 @@ if __name__ == '__main__':
     aws_access_key = "ea749b0383ee4fc2a367c0f859fc1b68"
     aws_secret_key = "38619fd506354a90ae58d2feaceb5824"
 
+    with open("output/data/rugby-crop/stutter/true-stutter-timestamps.json", 'r') as f:
+        json_data = json.load(f)
+        true_timestamps_json = json_data["timestamps"]
+
     detector = CloudDetector(
         aws_access_key, aws_secret_key,
-        video_downsample_frames=256, device='cpu'
+        video_downsample_frames=64, device='cpu'
     )
     detector.process(
+        truth=true_timestamps_json,
         location="local:output/data/rugby-crop/stutter/",
         time_indexed_files=True,
-        inference_epochs=3
+        inference_epochs=1
     )
