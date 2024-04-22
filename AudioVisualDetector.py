@@ -186,25 +186,31 @@ class AudioVisualDetector(AudioVisualProcessor):
         return output
 
     def plot_local_vqa(self, vqa_values, true_timestamps=None, startpoint=0, endpoint=0, output_file=''):
-        # Metrics
-        priority_metrics = [7, 9, 11, 13, 14]
-        plot_values = vqa_values[priority_metrics]
+        # Metrics & figure setup
+        # priority_metrics = [7, 9, 11, 13, 14]
+        # titles = {
+        #     "A": "Sharpness",
+        #     "B": "Noise",
+        #     "C": "Flicker",
+        #     "D": "Compression artefacts",
+        #     "E": "Motion fluency"
+        # }
+        # fig, axes = plt.subplot_mosaic("AB;CD;EE", sharex=True, sharey=True, figsize=(12, 9), tight_layout=True)
+
+        priority_metrics = [14]
         titles = {
-            "A": "Sharpness",
-            "B": "Noise",
-            "C": "Flicker",
-            "D": "Compression artefacts",
-            "E": "Motion fluency"
+            "A": "Motion fluency"
         }
+        plot_values = vqa_values[priority_metrics]
+        fig, axes = plt.subplot_mosaic("A", sharex=True, sharey=True, figsize=(12, 6), tight_layout=True)
+
+        colours = cycle(mcolors.TABLEAU_COLORS)
 
         # Timestamps
         plot_with_timestamps = startpoint != 0 and endpoint != 0
         if plot_with_timestamps:
             time_x = np.linspace(0, 1, len(plot_values[0])) * (endpoint - startpoint) + startpoint
             time_index = np.linspace(0, len(plot_values[0]), len(plot_values[0]))
-
-        cycol = cycle(mcolors.TABLEAU_COLORS)
-        fig, axes = plt.subplot_mosaic("AB;CD;EE", sharex=True, sharey=True, figsize=(12, 9), tight_layout=True)
 
         for value_id, (ax_id, title) in enumerate(titles.items()):
             # Plot true values of known video defect times if they exist
@@ -218,7 +224,7 @@ class AudioVisualDetector(AudioVisualProcessor):
                     approx_end = min(time_x, key=lambda dt: abs(dt - end))
                     approx_end_idx = np.where(time_x == approx_end)[0][0]
 
-                    axes[ax_id].axvspan(approx_start_idx, approx_end_idx, facecolor='r', alpha=0.2)
+                    axes[ax_id].axvspan(approx_start_idx, approx_end_idx, facecolor='grey', alpha=0.3)
 
             # Plot mean and twice standard deviation of VQA scores of each metric
             mean_over_video = plot_values[value_id].mean()
@@ -232,13 +238,13 @@ class AudioVisualDetector(AudioVisualProcessor):
 
             # Plot VQA scores themselves
             if plot_with_timestamps:
-                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(cycol))
+                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(colours))
             else:
-                axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(cycol))
+                axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(colours))
 
         # Format title and axes labels
         if plot_with_timestamps:
-            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
+            fig.suptitle(f"MaxVQA Video Defect Detection{f': Segment {self.video_segment_index}' if output_file == '' else ''} - Original Clip ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
             num_ticks = round(len(plot_values[0])/10)
             plt.xticks(
@@ -246,7 +252,7 @@ class AudioVisualDetector(AudioVisualProcessor):
                 labels=[t.strftime('%H:%M:%S') for t in time_x[::num_ticks]]
             )
         else:
-            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index}", fontsize=16)
+            fig.suptitle(f"MaxVQA Video Defect Detection{f': Segment {self.video_segment_index}' if output_file == '' else ''}", fontsize=16)
             fig.supxlabel("Capture Frame")
 
         fig.supylabel("Absolute score (0-1, bad-good)")
