@@ -185,7 +185,7 @@ class AudioVisualDetector(AudioVisualProcessor):
         print()
         return output
 
-    def plot_local_vqa(self, vqa_values, true_timestamps=None, startpoint=0, endpoint=0, output_file=''):
+    def plot_local_vqa(self, vqa_values, true_time_labels=None, startpoint=0, endpoint=0, output_file=''):
         # Metrics & figure setup
         # priority_metrics = [7, 9, 11, 13, 14]
         # titles = {
@@ -214,8 +214,8 @@ class AudioVisualDetector(AudioVisualProcessor):
 
         for value_id, (ax_id, title) in enumerate(titles.items()):
             # Plot true values of known video defect times if they exist
-            if plot_with_timestamps and true_timestamps is not None:
-                for times in true_timestamps:
+            if plot_with_timestamps and true_time_labels is not None:
+                for times in true_time_labels:
                     start = datetime.strptime(times[0], '%H:%M:%S')
                     approx_start = min(time_x, key=lambda dt: abs(dt - start))
                     approx_start_idx = np.where(time_x == approx_start)[0][0]
@@ -224,7 +224,7 @@ class AudioVisualDetector(AudioVisualProcessor):
                     approx_end = min(time_x, key=lambda dt: abs(dt - end))
                     approx_end_idx = np.where(time_x == approx_end)[0][0]
 
-                    axes[ax_id].axvspan(approx_start_idx, approx_end_idx, facecolor='grey', alpha=0.3)
+                    axes[ax_id].axvspan(approx_start_idx, approx_end_idx, facecolor='grey', alpha=0.3, label="True stuttering")
 
             # Plot mean and twice standard deviation of VQA scores of each metric
             mean_over_video = plot_values[value_id].mean()
@@ -233,18 +233,18 @@ class AudioVisualDetector(AudioVisualProcessor):
             axes[ax_id].set_title(title)
             axes[ax_id].grid(linewidth=0.2)
 
-            axes[ax_id].axhline(mean_over_video, color='black', ls='--', linewidth=0.5)
-            axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5)
+            axes[ax_id].axhline(mean_over_video, color='black', ls='--', linewidth=0.5, label="Mean score")
+            axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5, label="Two standard deviations")
 
             # Plot VQA scores themselves
             if plot_with_timestamps:
-                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(colours))
+                axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(colours), label="Score")
             else:
-                axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(colours))
+                axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(colours), label="Score")
 
         # Format title and axes labels
         if plot_with_timestamps:
-            fig.suptitle(f"MaxVQA Video Defect Detection{f': Segment {self.video_segment_index}' if output_file == '' else ''} - Original Clip ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
+            fig.suptitle(f"MaxVQA Video Defect Detection{f': Segment {self.video_segment_index}' if output_file == '' else ''} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
             num_ticks = round(len(plot_values[0])/10)
             plt.xticks(
@@ -258,12 +258,17 @@ class AudioVisualDetector(AudioVisualProcessor):
         fig.supylabel("Absolute score (0-1, bad-good)")
         plt.yticks([0, 0.25, 0.5, 0.75, 1])
 
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), loc=4)
+
         for ax in fig.get_axes():
             ax.label_outer()
 
         # Save plot to file
         if output_file == '':
-            fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+            # fig.savefig(f"output/plots/video-plot-{self.video_segment_index}.png")
+            fig.savefig(f"output/plots/motion-plot-{self.video_segment_index}.png")
         else:
             fig.savefig(f"output/plots/{output_file}")
 
