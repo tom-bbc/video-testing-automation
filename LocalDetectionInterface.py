@@ -94,9 +94,9 @@ class LocalDetectionInterface(AudioVisualDetector):
         print(f"Full timeline: {global_start_time.strftime('%H:%M:%S.%f')} => {global_end_time.strftime('%H:%M:%S.%f')}")
         self.plot_local_vqa(
             self.video_detection_results,
-            true_timestamps=truth,
+            true_time_labels=truth,
             startpoint=global_start_time, endpoint=global_end_time,
-            output_file="video-timeline.png"
+            output_file="motion-timeline.png"
         )
 
     def get_local_paths(self, audio_detection=True, video_detection=True, dir="./output/data/"):
@@ -143,15 +143,27 @@ class LocalDetectionInterface(AudioVisualDetector):
 
 
 if __name__ == '__main__':
-    # with open("output/data/rugby-crop/stutter/true-stutter-timestamps.json", 'r') as f:
-    #     json_data = json.load(f)
-    #     true_timestamps_json = json_data["timestamps"]
+    FRAMES = 256
+    EPOCHS = 3
+    PATH = "./output/data/uhd-nature"
+    STUTTER = True
 
-    detector = LocalDetectionInterface(
-        video_downsample_frames=256, device='cpu'
-    )
-    detector.process(
-        directory_path="./output/data/rugby-crop/original/",
-        time_indexed_files=True,
-        inference_epochs=3
-    )
+    detector = LocalDetectionInterface(video_downsample_frames=FRAMES, device='cpu')
+
+    if STUTTER:
+        with open(f"{PATH}/true-stutter-timestamps.json", 'r') as f:
+            json_data = json.load(f)
+            true_timestamps_json = json_data["timestamps"]
+
+        detector.process(
+            directory_path=f"{PATH}/stutter/",
+            truth=true_timestamps_json,
+            time_indexed_files=True,
+            inference_epochs=EPOCHS
+        )
+    else:
+        detector.process(
+            directory_path=f"{PATH}/original/",
+            time_indexed_files=True,
+            inference_epochs=EPOCHS
+        )
