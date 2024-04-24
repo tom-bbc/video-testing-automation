@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from time import time as timer
-import math
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
@@ -14,9 +13,9 @@ from MaxVQAVideoDetector import VideoDetector
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
-class AudioVisualDetector(AudioVisualProcessor):
+class StutterDetector(AudioVisualProcessor):
     def __init__(self, video_downsample_frames=64, device='cpu', *args, **kwargs):
-        super(AudioVisualDetector, self).__init__(*args, **kwargs)
+        super(StutterDetector, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
         self.video_detector = VideoDetector(frames=video_downsample_frames, device=device)
 
