@@ -1,7 +1,5 @@
 import numpy as np
-import wave
 from datetime import datetime
-import boto3
 import cv2
 import os
 import json
@@ -9,10 +7,10 @@ import math
 import glob
 from scipy.io import wavfile
 
-from AudioVisualDetector import AudioVisualDetector
+from StutterDetector import StutterDetector
 
 
-class LocalDetectionInterface(AudioVisualDetector):
+class LocalDetectionInterface(StutterDetector):
     def __init__(self, *args, **kwargs):
         super(LocalDetectionInterface, self).__init__(*args, **kwargs)
         self.audio_detection_results = []
@@ -99,7 +97,7 @@ class LocalDetectionInterface(AudioVisualDetector):
             output_file="motion-timeline.png"
         )
 
-    def get_local_paths(self, audio_detection=True, video_detection=True, dir="./output/data/"):
+    def get_local_paths(self, audio_detection=True, video_detection=True, dir="./data/"):
         sort_by_index = lambda path: int(path.split('/')[-1].split('_')[0][3:])
         audio_filenames, video_filenames = [], []
 
@@ -143,9 +141,9 @@ class LocalDetectionInterface(AudioVisualDetector):
 
 
 if __name__ == '__main__':
-    FRAMES = 256
-    EPOCHS = 3
-    PATH = "./output/data/uhd-nature"
+    FRAMES = 64
+    EPOCHS = 1
+    PATH = "./data/wild-dogs"
     STUTTER = True
 
     detector = LocalDetectionInterface(video_downsample_frames=FRAMES, device='cpu')
