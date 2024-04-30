@@ -1,12 +1,11 @@
 import cv2
-import sys
 import math
 import random
 import argparse
 from datetime import timedelta
 
 
-def run(video_path, output_path, num_stutters, max_stutter_length=1, min_stutter_length=0.2):
+def run(video_path, output_path, num_stutters, max_stutter_length=1, min_stutter_length=0.5):
     video = cv2.VideoCapture(video_path)
 
     length_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))

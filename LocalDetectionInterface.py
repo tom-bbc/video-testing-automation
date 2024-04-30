@@ -6,6 +6,7 @@ import json
 import math
 import glob
 from scipy.io import wavfile
+import argparse
 
 from StutterDetector import StutterDetector
 
@@ -141,27 +142,48 @@ class LocalDetectionInterface(StutterDetector):
 
 
 if __name__ == '__main__':
-    FRAMES = 64
-    EPOCHS = 1
-    PATH = "./data/wild-dogs"
-    STUTTER = True
+    # Recieve input parameters from CLI
+    parser = argparse.ArgumentParser(
+        prog='LocalDetectionInference.py',
+        description='Run audio and video detection algorithms over local video segment files.'
+    )
 
-    detector = LocalDetectionInterface(video_downsample_frames=FRAMES, device='cpu')
+    parser.add_argument("directory")
+    parser.add_argument('-f', '--frames', type=int, default=256)
+    parser.add_argument('-e', '--epochs', type=int, default=3)
+    parser.add_argument('-c', '--clean-video', action='store_true', default=False)
+    parser.add_argument('-na', '--no-audio', action='store_false', default=True)
+    parser.add_argument('-nv', '--no-video', action='store_false', default=True)
 
-    if STUTTER:
-        with open(f"{PATH}/true-stutter-timestamps.json", 'r') as f:
+    # Decode input parameters to toggle between cameras, microphones, and setup mode.
+    args = parser.parse_args()
+    path = args.directory
+    frames = args.frames
+    epochs = args.epochs
+    stutter = not args.clean_video
+    audio_on = args.no_audio
+    video_on = args.no_video
+
+    detector = LocalDetectionInterface(video_downsample_frames=frames, device='cpu')
+
+    if stutter:
+        with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:
             json_data = json.load(f)
             true_timestamps_json = json_data["timestamps"]
 
         detector.process(
-            directory_path=f"{PATH}/stutter/",
+            directory_path=f"{path}/stutter/",
             truth=true_timestamps_json,
             time_indexed_files=True,
-            inference_epochs=EPOCHS
+            inference_epochs=epochs,
+            audio_detection=audio_on,
+            video_detection=video_on
         )
     else:
         detector.process(
-            directory_path=f"{PATH}/original/",
+            directory_path=f"{path}/original/",
             time_indexed_files=True,
-            inference_epochs=EPOCHS
+            inference_epochs=epochs,
+            audio_detection=audio_on,
+            video_detection=video_on
         )
