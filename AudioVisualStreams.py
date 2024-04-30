@@ -34,7 +34,7 @@ class AudioStream():
             timestamp = datetime.datetime.now()
 
             frame_queue.append((timestamp, frame))
-            # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
+            print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
         stream.stop_stream()
         stream.close()
@@ -89,7 +89,7 @@ class VideoStream():
                 _, frame = self.video_stream.read()
                 timestamp = datetime.datetime.now()
                 frame_queue.append((timestamp, frame))
-                # print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
+                print(f"Timestamp counter: {timestamp.strftime('%H:%M:%S.%f')}", end='\r')
 
         self.video_stream.release()
         cv2.destroyAllWindows()
