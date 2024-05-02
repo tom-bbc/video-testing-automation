@@ -1,3 +1,7 @@
 [submodule "ExplainableVQA"]
 	path = ExplainableVQA
 	url = git@github.com:tom-bbc/ExplainableVQA.git
+
+[submodule "uvq"]
+	path = uvq
+	url = https://github.com/google/uvq.git

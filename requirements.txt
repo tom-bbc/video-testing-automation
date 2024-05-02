@@ -6,3 +6,5 @@ matplotlib
 essentia
 tqdm
 boto3
+tensorflow
+Pillow==9.2.0
