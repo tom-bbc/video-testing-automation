@@ -1,10 +1,16 @@
-import matplotlib.pyplot as plt
+import os
+import cv2
+import json
+import math
+import glob
+import argparse
 import numpy as np
+from scipy.io import wavfile
+from datetime import datetime
 from time import time as timer
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
-from datetime import datetime
 
 from AudioVisualProcessor import AudioVisualProcessor
 from EssentiaAudioDetector import AudioDetector
@@ -18,60 +24,131 @@ class StutterDetector(AudioVisualProcessor):
         super(StutterDetector, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
         self.video_detector = VideoDetector(frames=video_downsample_frames, device=device)
+        self.audio_detection_results = []
+        self.video_detection_results = np.array([[]]*16)
 
-    def process(self,
-                audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
-                video_module=Object(stream_open=False, video_device=None), video_frames=[],
-                checkpoint_files=False):
+    def process(self, directory_path, truth=None, audio_detection=True, video_detection=True, plot=True, time_indexed_files=True, inference_epochs=1):
+        if os.path.isfile(directory_path):
+            # Permits running on single input file
+            if directory_path.endswith(".mp4"):
+                video_segment_paths = [directory_path]
+                audio_segment_paths = []
+            elif directory_path.endswith(".wav"):
+                audio_segment_paths = [directory_path]
+                video_segment_paths = []
+            else:
+                exit(1)
+        elif os.path.isdir(directory_path):
+            # Gets list of AV files from local directory
+            audio_segment_paths, video_segment_paths = self.get_local_paths(audio_detection, video_detection, dir=directory_path)
+        else:
+            exit(1)
 
-        if audio_module.stream_open:
-            print(f"         * Segment size           : {self.audio_buffer_len_f}")
-            print(f"         * Overlap size           : {self.audio_overlap_len_f}")
+        # Cycle through each AV file running detection algorithms
+        for index in range(max(len(audio_segment_paths), len(video_segment_paths))):
+            # Run audio detection
+            if audio_detection and index < len(audio_segment_paths):
+                audio_path = audio_segment_paths[index]
+                audio_segment = self.get_local_audio(audio_path)
+                print(f"New audio segment: {audio_path.split('/')[-1]} {audio_segment.shape}")
 
-        if video_module.stream_open:
-            print(f"     * Video:")
-            print(f"         * Capture device         : {video_module.video_device}")
-            print(f"         * Frame rate             : {self.video_fps}")
-            print(f"         * Segment size           : {self.video_buffer_len_f}")
-            print(f"         * Overlap size           : {self.video_overlap_len_f}")
+                if time_indexed_files:
+                    timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
 
-        print(f"\nStart of audio-visual processing")
+                    results = self.audio_detection(
+                        audio_segment,
+                        plot=plot,
+                        start_time=timestamps[0],
+                        end_time=timestamps[-1]
+                    )
+                else:
+                    results = self.audio_detection(
+                        audio_segment,
+                        plot=plot
+                    )
 
-        while (audio_module.stream_open or video_module.stream_open) or \
-            (len(audio_frames) >= self.audio_buffer_len_f) or \
-            (len(video_frames) >= self.video_buffer_len_f):
-
-            # Audio processing module
-            if len(audio_frames) >= self.audio_buffer_len_f:
-                audio_segment = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
-                results = self.audio_detection(
-                    audio_segment,
-                    plot=True,
-                    time_indexed_audio=True
-                )
                 self.audio_segment_index += 1
 
-            # Video processing module
-            if len(video_frames) >= self.video_buffer_len_f:
-                video_segment = self.collate_video_frames(video_frames, checkpoint_files)
-                results = self.video_detection(
-                    video_segment,
-                    plot=True,
-                    time_indexed_video=True
-                )
+            # Run video detection
+            if video_detection and index < len(video_segment_paths):
+                video_path = video_segment_paths[index]
+                video_segment = self.get_local_video(video_path)
+                print(f"New video segment: {video_path.split('/')[-1]} {video_segment.shape}")
+
+                if time_indexed_files:
+                    timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
+
+                    results = self.video_detection(
+                        video_segment,
+                        plot=plot,
+                        start_time=timestamps[0],
+                        end_time=timestamps[-1],
+                        epochs=inference_epochs
+                    )
+                    # print(f" * Video detection results: {results.shape}")
+                else:
+                    results = self.video_detection(
+                        video_segment,
+                        plot=plot,
+                        epochs=inference_epochs
+                    )
+
+                # Add local detection results to global results timeline (compensating for segment overlap)
+                self.video_detection_results = np.append(self.video_detection_results, results[:, :math.ceil(results.shape[1] * 0.9)], axis=1)
                 self.video_segment_index += 1
 
-        # Save all detection timestamps to CSV database
-        if len(self.audio_detector.gaps) > 0:
-            detected_gap_timestamps = np.array([(s.strftime('%H:%M:%S.%f'), e.strftime('%H:%M:%S.%f')) for s, e in self.audio_detector.gaps])
-            np.savetxt("output/detected_gaps.csv", detected_gap_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+        # Plot global video detection results over all clips in timeline
+        global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[1], '%H:%M:%S.%f')
+        global_end_time = timestamps[-1]
+        print(f"Full timeline: {global_start_time.strftime('%H:%M:%S.%f')} => {global_end_time.strftime('%H:%M:%S.%f')}")
+        self.plot_local_vqa(
+            self.video_detection_results,
+            true_time_labels=truth,
+            startpoint=global_start_time, endpoint=global_end_time,
+            output_file="motion-timeline.png"
+        )
 
-        if len(self.audio_detector.clicks) > 0:
-            detected_click_timestamps = np.array([t.strftime('%H:%M:%S.%f') for t in self.audio_detector.clicks])
-            np.savetxt("output/detected_clicks.csv", detected_click_timestamps, delimiter=",", fmt='%s', header='Timestamp')
+    def get_local_paths(self, audio_detection=True, video_detection=True, dir="./data/"):
+        sort_by_index = lambda path: int(path.split('/')[-1].split('_')[0][3:])
+        audio_filenames, video_filenames = [], []
 
-        print(f"\nProcessing module ended.")
-        print(f"Remaining unprocessed frames: {len(audio_frames)} audio and {len(video_frames)} video \n")
+        if audio_detection:
+            audio_filenames = glob.glob(f"{dir}*.wav")
+            audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
+
+        if video_detection:
+            video_filenames = glob.glob(f"{dir}*.mp4")
+            video_filenames = list(sorted(video_filenames, key=sort_by_index))
+
+        return audio_filenames, video_filenames
+
+    def get_local_audio(self, filename):
+        # Retrieve and decode wav file from local storage
+        samplerate, audio_asset = wavfile.read(filename)
+
+        if len(audio_asset.shape) < 2:
+            audio_asset = np.expand_dims(audio_asset, axis=0)
+
+        no_channels = audio_asset.shape[1]
+        length = audio_asset.shape[0] / samplerate
+
+        return audio_asset
+
+    def get_local_video(self, filename):
+        # Retrieve and decode mp4 file from local storage
+        video_source = cv2.VideoCapture(filename)
+        frame_buffer = []
+        success = True
+
+        while success:
+            # Read video frame-by-frame from the opencv capture object; img is (H, W, C)
+            success, frame = video_source.read()
+            if success:
+                frame_buffer.append(frame)
+
+        video_asset = np.stack(frame_buffer, axis=0)  # dimensions (T, H, W, C)
+
+        return video_asset
 
     def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=True, plot=False, start_time=0, end_time=0):
         if time_indexed_audio:
@@ -273,3 +350,51 @@ class StutterDetector(AudioVisualProcessor):
 
         print(f"     * Plot generated     : {f'video-plot-{self.video_segment_index}.png' if output_file == '' else output_file}")
         plt.close(fig)
+
+
+if __name__ == '__main__':
+    # Recieve input parameters from CLI
+    parser = argparse.ArgumentParser(
+        prog='StutterDetector.py',
+        description='Run audio and video stutter detection algorithms over local AV segments.'
+    )
+
+    parser.add_argument("directory")
+    parser.add_argument('-f', '--frames', type=int, default=256)
+    parser.add_argument('-e', '--epochs', type=int, default=3)
+    parser.add_argument('-c', '--clean-video', action='store_true', default=False)
+    parser.add_argument('-na', '--no-audio', action='store_false', default=True)
+    parser.add_argument('-nv', '--no-video', action='store_false', default=True)
+
+    # Decode input parameters to toggle between cameras, microphones, and setup mode.
+    args = parser.parse_args()
+    path = args.directory
+    frames = args.frames
+    epochs = args.epochs
+    stutter = not args.clean_video
+    audio_on = args.no_audio
+    video_on = args.no_video
+
+    detector = StutterDetector(video_downsample_frames=frames, device='cpu')
+
+    if stutter:
+        with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:
+            json_data = json.load(f)
+            true_timestamps_json = json_data["timestamps"]
+
+        detector.process(
+            directory_path=f"{path}/stutter/",
+            truth=true_timestamps_json,
+            time_indexed_files=True,
+            inference_epochs=epochs,
+            audio_detection=audio_on,
+            video_detection=video_on
+        )
+    else:
+        detector.process(
+            directory_path=f"{path}/original/",
+            time_indexed_files=True,
+            inference_epochs=epochs,
+            audio_detection=audio_on,
+            video_detection=video_on
+        )
