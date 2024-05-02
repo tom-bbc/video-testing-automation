@@ -6,7 +6,7 @@ import argparse
 
 from AudioVisualStreams import AudioStream, VideoStream
 from AudioVisualProcessor import AudioVisualProcessor
-from StutterDetector import StutterDetector
+from StutterDetection import StutterDetection
 
 
 def signal_handler(sig, frame):
@@ -108,7 +108,7 @@ if __name__ == '__main__':
         # Initialise and launch av detetion algorithms
         else:
             if audio_on and video_on:
-                processor = StutterDetector(
+                processor = StutterDetection(
                     video_fps=video.frame_rate, video_shape=(video.width, video.height),
                     video_downsample_frames=32, device='cpu'
                 )
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                     checkpoint_files=save_av_files
                 )
             elif video_on:
-                processor = StutterDetector(
+                processor = StutterDetection(
                     video_fps=video.frame_rate, video_shape=(video.width, video.height),
                     video_downsample_frames=32, device='cpu'
                 )
@@ -127,7 +127,7 @@ if __name__ == '__main__':
                     checkpoint_files=save_av_files
                 )
             elif audio_on:
-                processor = StutterDetector(device='cpu')
+                processor = StutterDetection(device='cpu')
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                     checkpoint_files=save_av_files

@@ -19,9 +19,9 @@ from MaxVQAVideoDetector import VideoDetector
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
-class StutterDetector(AudioVisualProcessor):
+class StutterDetection(AudioVisualProcessor):
     def __init__(self, video_downsample_frames=64, device='cpu', *args, **kwargs):
-        super(StutterDetector, self).__init__(*args, **kwargs)
+        super(StutterDetection, self).__init__(*args, **kwargs)
         self.audio_detector = AudioDetector()
         self.video_detector = VideoDetector(frames=video_downsample_frames, device=device)
         self.audio_detection_results = []
@@ -355,7 +355,7 @@ class StutterDetector(AudioVisualProcessor):
 if __name__ == '__main__':
     # Recieve input parameters from CLI
     parser = argparse.ArgumentParser(
-        prog='StutterDetector.py',
+        prog='StutterDetection.py',
         description='Run audio and video stutter detection algorithms over local AV segments.'
     )
 
@@ -375,7 +375,7 @@ if __name__ == '__main__':
     audio_on = args.no_audio
     video_on = args.no_video
 
-    detector = StutterDetector(video_downsample_frames=frames, device='cpu')
+    detector = StutterDetection(video_downsample_frames=frames, device='cpu')
 
     if stutter:
         with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:

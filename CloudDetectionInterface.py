@@ -3,10 +3,10 @@ from datetime import datetime
 import boto3
 import math
 import cv2
-from StutterDetector import StutterDetector
+from StutterDetection import StutterDetection
 
 
-class CloudDetectionInterface(StutterDetector):
+class CloudDetectionInterface(StutterDetection):
     def __init__(self, aws_access_key, aws_secret_key, *args, **kwargs):
         super(CloudDetectionInterface, self).__init__(*args, **kwargs)
         self.s3_bucket = 'video-testing-automation'
