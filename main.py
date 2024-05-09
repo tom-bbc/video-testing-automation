@@ -94,13 +94,13 @@ if __name__ == '__main__':
                 )
                 processor.process(
                     video_module=video, video_frames=video_frame_queue,
-                    checkpoint_files=True
+                    checkpoint_files=True, audio_on=False
                 )
             elif audio_on:
                 processor = AudioVisualProcessor()
                 processor.process(
                     audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                    checkpoint_files=True
+                    checkpoint_files=True, video_on=False
                 )
             else:
                 exit(0)

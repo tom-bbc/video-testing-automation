@@ -8,3 +8,4 @@ tqdm
 boto3
 tensorflow
 Pillow==9.2.0
+moviepy
