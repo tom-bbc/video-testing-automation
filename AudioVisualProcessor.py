@@ -13,8 +13,7 @@ Object = lambda **kwargs: type("Object", (), kwargs)
 class AudioVisualProcessor():
     def __init__(self, video_fps=30, video_shape=(), audio_fps=44100, audio_chunk_size=1024,
                  audio_buffer_len_s=10, audio_overlap_len_s=1,
-                 video_buffer_len_s=10, video_overlap_len_s=1,
-                 aws_access_key='', aws_secret_key=''):
+                 video_buffer_len_s=10, video_overlap_len_s=1):
 
         self.audio_fps = audio_fps
         self.video_fps = video_fps
@@ -28,20 +27,10 @@ class AudioVisualProcessor():
         self.video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
         self.video_overlap_len_f = math.ceil(video_fps * video_overlap_len_s)
 
-        if aws_access_key != '' and aws_secret_key != '':
-            self.s3_bucket = 'video-testing-automation'
-            self.aws_session = boto3.session.Session()
-            self.s3_client = self.aws_session.client(
-                service_name='s3',
-                aws_access_key_id=aws_access_key,
-                aws_secret_access_key=aws_secret_key,
-                endpoint_url="https://object.lon1.bbcis.uk"
-            )
-
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
                 video_module=Object(stream_open=False, video_device=None), video_frames=[],
-                checkpoint_files=False, checkpoint_to_s3=False,
+                checkpoint_files=False,
                 audio_on=True, video_on=True, synchronize=True):
 
         if audio_on:
@@ -68,32 +57,32 @@ class AudioVisualProcessor():
                     audio_frames, video_frames = self.sync_av_frame_queues(audio_frames, video_frames)
 
                     # Audio processing module
-                    audio_segment, audio_file = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files, checkpoint_to_s3)
+                    audio_segment, audio_file = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
                     self.audio_segment_index += 1
 
                     # Video processing module
-                    video_segment, video_file = self.collate_video_frames(video_frames, checkpoint_files, checkpoint_to_s3)
+                    video_segment, video_file = self.collate_video_frames(video_frames, checkpoint_files)
                     self.video_segment_index += 1
 
                     # Combine audio and video into single syncronised file
                     if checkpoint_files:
-                        audio_clip = AudioFileClip(f"output/data/{audio_file}")
-                        video_clip = VideoFileClip(f"output/data/{video_file}")
+                        audio_clip = AudioFileClip(f"output/capture/audio/{audio_file}")
+                        video_clip = VideoFileClip(f"output/capture/video/{video_file}")
 
                         if video_clip.end < audio_clip.end:
                             audio_clip = audio_clip.subclip(0, video_clip.end)
 
                         full_clip = video_clip.set_audio(audio_clip)
-                        full_clip.write_videofile(f"output/data/{video_file.replace('vid', 'seg')}", verbose=False, logger=None)
+                        full_clip.write_videofile(f"output/capture/segments/{video_file.replace('vid', 'seg')}", verbose=False, logger=None)
             else:
                 # Audio processing module
                 if len(audio_frames) >= self.audio_buffer_len_f:
-                    _ = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files, checkpoint_to_s3)
+                    _ = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
                     self.audio_segment_index += 1
 
                 # Video processing module
                 if len(video_frames) >= self.video_buffer_len_f:
-                    _ = self.collate_video_frames(video_frames, checkpoint_files, checkpoint_to_s3)
+                    _ = self.collate_video_frames(video_frames, checkpoint_files)
                     self.video_segment_index += 1
 
         print(f"\nProcessing module ended.")
@@ -163,7 +152,7 @@ class AudioVisualProcessor():
 
         return audio_frame_queue, video_frame_queue
 
-    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100, save_wav_file=False, save_to_s3=False):
+    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100, save_wav_file=False):
         file_name = ''
         frame_bytes_buffer = []
         timestamps = []
@@ -198,33 +187,24 @@ class AudioVisualProcessor():
         # Save audio data to WAV file for checking later
         if save_wav_file:
             file_name = f"aud{self.audio_segment_index}_{frame_buffer[0][0].strftime('%H:%M:%S.%f')}_{frame_buffer[-1][0].strftime('%H:%M:%S.%f')}.wav"
-            wav_file = wave.open(f'output/data/{file_name}', 'wb')
+            wav_file = wave.open(f'output/capture/audio/{file_name}', 'wb')
             wav_file.setnchannels(no_channels)
             wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(b''.join(frame_bytes_buffer))
             wav_file.close()
-
-            if save_to_s3:
-                print("Uploading audio to S3")
-                self.s3_client.upload_file(
-                    f"output/data/{file_name}",
-                    self.s3_bucket,
-                    f"audio-segments/{file_name}"
-                )
-
             print(f" * Audio end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
 
         return np.array(frame_buffer, dtype=object), file_name
 
-    def collate_video_frames(self, frame_queue, save_mp4_file=False, save_to_s3=False):
+    def collate_video_frames(self, frame_queue, save_mp4_file=False):
         # Setup memory buffer of frames and output video file
         file_name = ''
         frame_buffer = []
         if save_mp4_file:
             file_name = f"vid{self.video_segment_index}_{frame_queue[0][0].strftime('%H:%M:%S.%f')}_{frame_queue[self.video_buffer_len_f - 1][0].strftime('%H:%M:%S.%f')}.mp4"
             output_file = cv2.VideoWriter(
-                f"output/data/{file_name}",
+                f"output/capture/video/{file_name}",
                 cv2.VideoWriter_fourcc(*'mp4v'),
                 self.video_fps,
                 self.video_shape
@@ -244,14 +224,6 @@ class AudioVisualProcessor():
 
         if save_mp4_file:
             output_file.release()
-
-            if save_to_s3:
-                self.s3_client.upload_file(
-                    f"output/data/{file_name}",
-                    self.s3_bucket,
-                    f"video-segments/{file_name}"
-                )
-
             print(f" * Video end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}", end='\n\n')
 
         return np.array(frame_buffer, dtype=object), file_name
