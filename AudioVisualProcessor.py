@@ -4,7 +4,7 @@ import numpy as np
 import pyaudio
 import wave
 import boto3
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+from moviepy.editor import VideoFileClip, AudioFileClip
 
 
 Object = lambda **kwargs: type("Object", (), kwargs)
@@ -120,7 +120,6 @@ class AudioVisualProcessor():
                 elif audio_timestamp > video_start_time:
                     # If we have passed the video start time, find the closest audio frame time before or after
                     prev_audio_timestamp, _ = audio_frame_queue[current_audio_idx - 1]
-                    print(f"audio span: {prev_audio_timestamp.strftime('%H:%M:%S.%f')} -> [{video_start_time.strftime('%H:%M:%S.%f')}] -> {audio_timestamp.strftime('%H:%M:%S.%f')}")
                     if abs(video_start_time - prev_audio_timestamp) <= abs(video_start_time - audio_timestamp):
                         new_audio_start_idx = current_audio_idx - 1
                     else:
@@ -143,7 +142,6 @@ class AudioVisualProcessor():
                 elif audio_timestamp > video_start_time:
                     # If we have passed the audio start time, find the closest video frame time before or after
                     prev_video_timestamp, _ = video_frame_queue[current_video_idx - 1]
-                    print(f"video span: {prev_video_timestamp.strftime('%H:%M:%S.%f')} -> [{video_start_time.strftime('%H:%M:%S.%f')}] -> {audio_timestamp.strftime('%H:%M:%S.%f')}")
                     if abs(audio_start_time - prev_video_timestamp) <= abs(audio_start_time - video_timestamp):
                         new_video_start_idx = current_video_idx - 1
                     else:
@@ -154,16 +152,14 @@ class AudioVisualProcessor():
 
         # Skip forward in the audio or video frame queue to synchronise start timestamps
         if new_audio_start_idx is not None:
-            print(f"new_audio_start_idx = {new_audio_start_idx}")
             for _ in range(new_audio_start_idx): audio_frame_queue.popleft()
 
         if new_video_start_idx is not None:
-            print(f"new_video_start_idx = {new_video_start_idx}")
             for _ in range(new_video_start_idx): video_frame_queue.popleft()
 
-        print(f"\nSynchronised AV queues.")
-        print(f"Audio start time: {audio_frame_queue[0][0].strftime('%H:%M:%S.%f')}")
-        print(f"Video start time: {video_frame_queue[0][0].strftime('%H:%M:%S.%f')}")
+        print(f"\nSynchronised AV frame segments:")
+        print(f" * Audio start time: {audio_frame_queue[0][0].strftime('%H:%M:%S.%f')}")
+        print(f" * Video start time: {video_frame_queue[0][0].strftime('%H:%M:%S.%f')}")
 
         return audio_frame_queue, video_frame_queue
 
@@ -217,7 +213,7 @@ class AudioVisualProcessor():
                     f"audio-segments/{file_name}"
                 )
 
-            print(f"Audio end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
+            print(f" * Audio end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
 
         return np.array(frame_buffer, dtype=object), file_name
 
@@ -256,6 +252,6 @@ class AudioVisualProcessor():
                     f"video-segments/{file_name}"
                 )
 
-            print(f"Video end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}", end='\n\n')
+            print(f" * Video end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}", end='\n\n')
 
         return np.array(frame_buffer, dtype=object), file_name
