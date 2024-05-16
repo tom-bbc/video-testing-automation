@@ -5,3 +5,15 @@
 [submodule "uvq"]
 	path = uvq
 	url = https://github.com/google/uvq.git
+[submodule "syncnet_python"]
+	path = syncnet_python
+	url = https://github.com/joonson/syncnet_python.git
+[submodule "Synchformer"]
+	path = Synchformer
+	url = https://github.com/v-iashin/Synchformer.git
+[submodule "SparseSync"]
+	path = SparseSync
+	url = https://github.com/v-iashin/SparseSync.git
+[submodule "vocalist"]
+	path = vocalist
+	url = https://github.com/vskadandale/vocalist.git
