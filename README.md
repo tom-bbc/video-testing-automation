@@ -1,4 +1,4 @@
-# video-testing-automation
+# Stutter Detection
 
 ## Installing
 
@@ -47,3 +47,22 @@ options:
   -a AUDIO, --audio AUDIO
   -v VIDEO, --video VIDEO
 ```
+
+
+# AV Synchronisation Detection
+
+## SyncNet
+
+### Install (for cpu)
+
+* Update the requirement `scenedetect` in file `requirements.txt` to the latest version using `scenedetect>=0.6.3`
+* Then install requirements: `pip install -r requirements.txt`
+* Download pre-trained SyncNet model by running `./download_model.sh`
+* In file `SyncNetInstance.py`, remove instances of `.cuda()`
+* In file `run_pipeline.py`, change device of face detection model by swapping line 187 to `DET = S3FD(device='cpu')`
+* In file `detectors/s3fd/box_utils.py`, update depreciated `np.int` reference on line 38 to just `int`
+
+### Run
+
+* Demo script: `python demo_syncnet.py --videofile data/example.avi --tmp_dir output`
+* Using my inference script (after moving into syncnet_python dir): `python syncnet_inference.py --videofile ../data/putin-offset.mp4 --reference putin-offset --data_dir output`
