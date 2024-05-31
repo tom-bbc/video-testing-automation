@@ -2,8 +2,8 @@ import os
 import glob
 import numpy as np
 
-from AudioVisualProcessor import AudioVisualProcessor
-from GoogleUVQDetector import VideoDetector
+from capture.AudioVisualProcessor import AudioVisualProcessor
+from stutter_detection.GoogleUVQDetector import VideoDetector
 
 
 class VideoQualityDetection(AudioVisualProcessor):

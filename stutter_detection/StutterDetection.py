@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
 
-from EssentiaAudioDetector import AudioDetector
-from MaxVQAVideoDetector import VideoDetector
+from stutter_detection.EssentiaAudioDetector import AudioDetector
+from stutter_detection.MaxVQAVideoDetector import VideoDetector
 
 Object = lambda **kwargs: type("Object", (), kwargs)
 
