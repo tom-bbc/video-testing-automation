@@ -4,8 +4,8 @@ from threading import Thread
 import sounddevice
 import argparse
 
-from AudioVisualStreams import AudioStream, VideoStream
-from AudioVisualProcessor import AudioVisualProcessor
+from capture.AudioVisualStreams import AudioStream, VideoStream
+from capture.AudioVisualProcessor import AudioVisualProcessor
 
 
 def signal_handler(sig, frame):

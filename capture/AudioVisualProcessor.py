@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import pyaudio
 import wave
-import boto3
 from moviepy.editor import VideoFileClip, AudioFileClip
 
 
