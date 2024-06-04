@@ -66,3 +66,18 @@ options:
 
 * Demo script: `python demo_syncnet.py --videofile data/example.avi --tmp_dir output`
 * Using my inference script (after moving into syncnet_python dir): `python syncnet_inference.py --videofile ../data/putin-offset.mp4 --reference putin-offset --data_dir output`
+
+
+## Vocalist
+
+### Install (for cpu)
+
+* In `models/model.py` add `device` parameter to `init` method of `SyncTransformer` class.
+* Pass the device parameter to all `TransformerEncoder` instances.
+* In `models/transformer_encoder.py` add `device` parameter to `init` method of `TransformerEncoder` and `TransformerEncoderLayer` classes.
+* Within the `TransformerEncoder` init method, pass the device parameter to all `TransformerEncoderLayer` instances.
+* Within the `TransformerEncoderLayer` init method, add `self.device` as a field initialised from the input parameter.
+* Add `self` to the inputs of the `buffered_future_mask` method of `TransformerEncoderLayer` and replace the inner `.cuda()` method call with `.to(self.device)`
+* In `test_lrs2.py` add `data_root` as a `init` method parameter of the `Dataset` class, and pass this to the `get_image_list` method call.
+* `brew install cmake` and `pip install dlib`
+* `pip install "librosa=0.9.1"`
