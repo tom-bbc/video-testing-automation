@@ -1,7 +1,18 @@
-[submodule "ExplainableVQA"]
-	path = ExplainableVQA
-	url = git@github.com:tom-bbc/ExplainableVQA.git
-
-[submodule "uvq"]
-	path = uvq
+[submodule "stutter_detection/ExplainableVQA"]
+	path = stutter_detection/ExplainableVQA
+	url = https://github.com/tom-bbc/ExplainableVQA.git
+[submodule "stutter_detection/uvq"]
+	path = stutter_detection/uvq
 	url = https://github.com/google/uvq.git
+[submodule "av_sync_detection/syncnet_python"]
+	path = av_sync_detection/syncnet_python
+	url = https://github.com/joonson/syncnet_python.git
+[submodule "av_sync_detection/Synchformer"]
+	path = av_sync_detection/Synchformer
+	url = https://github.com/v-iashin/Synchformer.git
+[submodule "av_sync_detection/SparseSync"]
+	path = av_sync_detection/SparseSync
+	url = https://github.com/v-iashin/SparseSync.git
+[submodule "av_sync_detection/vocalist"]
+	path = av_sync_detection/vocalist
+	url = https://github.com/vskadandale/vocalist.git
