@@ -1,12 +1,11 @@
 import yaml
 import torch
 import numpy as np
-from time import time
 
-from ExplainableVQA.open_clip.src import open_clip
-from ExplainableVQA.DOVER.dover import DOVER
-from ExplainableVQA.DOVER.dover.datasets import UnifiedFrameSampler, get_single_view
-from ExplainableVQA.model import TextEncoder, MaxVQA, EnhancedVisualEncoder
+from stutter_detection.ExplainableVQA.open_clip.src import open_clip
+from stutter_detection.ExplainableVQA.DOVER.dover import DOVER
+from stutter_detection.ExplainableVQA.DOVER.dover.datasets import UnifiedFrameSampler, get_single_view
+from stutter_detection.ExplainableVQA.model import TextEncoder, MaxVQA, EnhancedVisualEncoder
 
 torch.cuda.empty_cache()
 

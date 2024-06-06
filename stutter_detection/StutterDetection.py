@@ -12,20 +12,21 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
 
-from AudioVisualProcessor import AudioVisualProcessor
-from EssentiaAudioDetector import AudioDetector
-from MaxVQAVideoDetector import VideoDetector
+from stutter_detection.EssentiaAudioDetector import AudioDetector
+from stutter_detection.MaxVQAVideoDetector import VideoDetector
 
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
-class StutterDetection(AudioVisualProcessor):
-    def __init__(self, video_downsample_frames=64, device='cpu', *args, **kwargs):
-        super(StutterDetection, self).__init__(*args, **kwargs)
+class StutterDetection():
+    def __init__(self, video_downsample_frames=64, audio_fps=44100, device='cpu'):
         self.audio_detector = AudioDetector()
         self.video_detector = VideoDetector(frames=video_downsample_frames, device=device)
         self.audio_detection_results = []
         self.video_detection_results = np.array([[]]*16)
+        self.audio_fps = audio_fps
+        self.audio_segment_index = 0
+        self.video_segment_index = 0
 
     def process(self, directory_path, truth=None, audio_detection=True, video_detection=True, plot=True, time_indexed_files=True, inference_epochs=1):
         if os.path.isfile(directory_path):
@@ -377,24 +378,33 @@ if __name__ == '__main__':
 
     detector = StutterDetection(video_downsample_frames=frames, device='cpu')
 
-    if stutter:
-        with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:
-            json_data = json.load(f)
-            true_timestamps_json = json_data["timestamps"]
-
+    if path.endswith(".mp4") or path.endswith(".wav"):
         detector.process(
-            directory_path=f"{path}/stutter/",
-            truth=true_timestamps_json,
+            directory_path=path,
             time_indexed_files=True,
             inference_epochs=epochs,
             audio_detection=audio_on,
             video_detection=video_on
         )
     else:
-        detector.process(
-            directory_path=f"{path}/original/",
-            time_indexed_files=True,
-            inference_epochs=epochs,
-            audio_detection=audio_on,
-            video_detection=video_on
-        )
+        if stutter:
+            with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:
+                json_data = json.load(f)
+                true_timestamps_json = json_data["timestamps"]
+
+            detector.process(
+                directory_path=f"{path}/stutter/",
+                truth=true_timestamps_json,
+                time_indexed_files=True,
+                inference_epochs=epochs,
+                audio_detection=audio_on,
+                video_detection=video_on
+            )
+        else:
+            detector.process(
+                directory_path=f"{path}/original/",
+                time_indexed_files=True,
+                inference_epochs=epochs,
+                audio_detection=audio_on,
+                video_detection=video_on
+            )

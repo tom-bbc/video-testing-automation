@@ -5,7 +5,7 @@ from decord import VideoReader
 import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import gfile
 
-import uvq.uvq_utils as utils
+from stutter_detection.uvq import uvq_utils as utils
 
 
 # Distortion label names
