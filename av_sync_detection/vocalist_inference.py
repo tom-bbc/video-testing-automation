@@ -96,18 +96,16 @@ def face_detect(images, device='cpu'):
 
     results = []
     pady1, pady2, padx1, padx2 = pads
-    with tqdm(zip(predictions, images)) as P:
-        P.set_description("Bounding box prediction")
-        for rect, image in P:
-            if rect is None:
-                raise ValueError('Face not detected!')
+    for rect, image in zip(predictions, images):
+        if rect is None:
+            raise ValueError('Face not detected!')
 
-            y1 = max(0, rect[1] - pady1)
-            y2 = min(image.shape[0], rect[3] + pady2)
-            x1 = max(0, rect[0] - padx1)
-            x2 = min(image.shape[1], rect[2] + padx2)
+        y1 = max(0, rect[1] - pady1)
+        y2 = min(image.shape[0], rect[3] + pady2)
+        x1 = max(0, rect[0] - padx1)
+        x2 = min(image.shape[1], rect[2] + padx2)
 
-            results.append([x1, y1, x2, y2])
+        results.append([x1, y1, x2, y2])
 
 
     boxes = get_smoothened_boxes(np.array(results), T=5)

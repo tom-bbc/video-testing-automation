@@ -8,4 +8,9 @@ av_sync_detection/SparseSync/vis/
 av_sync_detection/Synchformer/vis/
 av_sync_detection/vocalist/Wav2Lip/
 av_sync_detection/vocalist/vocalist_weights/
-av_sync_detection/vocalist/filelists/inference.txt
+av_sync_detection/vocalist/tmp/
+av_sync_detection/offset_-1_to_1.sh
+av_sync_detection/syncnet_inference.sh
+plotting/**/*.png
+plotting/**/*.csv
+plotting/**/*.numbers
