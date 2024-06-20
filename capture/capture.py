@@ -3,9 +3,10 @@ from collections import deque
 from threading import Thread
 import sounddevice
 import argparse
+from pathlib import Path
 
-from capture.AudioVisualStreams import AudioStream, VideoStream
-from capture.AudioVisualProcessor import AudioVisualProcessor
+from AudioVisualStreams import AudioStream, VideoStream
+from AudioVisualProcessor import AudioVisualProcessor
 
 
 def signal_handler(sig, frame):
@@ -59,6 +60,16 @@ if __name__ == '__main__':
         video.launch(display_stream=True)
 
     else:
+        # Create segment save locations
+        if save_av_files:
+            audio_save_path = "output/capture/audio/"
+            video_save_path = "output/capture/video/"
+            av_save_path = "output/capture/segments/"
+
+            Path(audio_save_path).mkdir(parents=True, exist_ok=True)
+            Path(video_save_path).mkdir(parents=True, exist_ok=True)
+            Path(av_save_path).mkdir(parents=True, exist_ok=True)
+
         # Set up and launch audio-video stream threads
         if audio_on:
             audio = AudioStream(device=audio_device)
@@ -75,17 +86,24 @@ if __name__ == '__main__':
         # Check if user wants to run detection algorithms, or just save av segments to disk
         if audio_on and video_on:
             processor = AudioVisualProcessor(
-                video_fps=video.frame_rate, video_shape=(video.width, video.height)
+                video_fps=video.frame_rate, video_shape=(video.width, video.height),
             )
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 video_module=video, video_frames=video_frame_queue,
-                checkpoint_files=True
+                checkpoint_files=save_av_files
             )
         elif video_on:
-            processor = AudioVisualProcessor(
-                video_fps=video.frame_rate, video_shape=(video.width, video.height)
-            )
+            if save_av_files:
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
+                    audio_save_path=audio_save_path, video_save_path=video_save_path, av_save_path=av_save_path
+                )
+            else:
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height)
+                )
+
             processor.process(
                 video_module=video, video_frames=video_frame_queue,
                 checkpoint_files=True, audio_on=False

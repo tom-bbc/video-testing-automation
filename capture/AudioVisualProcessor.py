@@ -12,7 +12,11 @@ Object = lambda **kwargs: type("Object", (), kwargs)
 class AudioVisualProcessor():
     def __init__(self, video_fps=30, video_shape=(), audio_fps=44100, audio_chunk_size=1024,
                  audio_buffer_len_s=10, audio_overlap_len_s=1,
-                 video_buffer_len_s=10, video_overlap_len_s=1):
+                 video_buffer_len_s=10, video_overlap_len_s=1,
+                 audio_save_path="output/capture/audio/",
+                 video_save_path="output/capture/video/",
+                 av_save_path="output/capture/segments/"
+                ):
 
         self.audio_fps = audio_fps
         self.video_fps = video_fps
@@ -25,6 +29,10 @@ class AudioVisualProcessor():
         self.audio_overlap_len_f = math.ceil(audio_fps * audio_overlap_len_s / audio_chunk_size)
         self.video_buffer_len_f = math.ceil(video_fps * video_buffer_len_s)
         self.video_overlap_len_f = math.ceil(video_fps * video_overlap_len_s)
+
+        self.audio_save_path = audio_save_path
+        self.video_save_path = video_save_path
+        self.segment_save_path = av_save_path
 
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
@@ -65,14 +73,14 @@ class AudioVisualProcessor():
 
                     # Combine audio and video into single syncronised file
                     if checkpoint_files:
-                        audio_clip = AudioFileClip(f"output/capture/audio/{audio_file}")
-                        video_clip = VideoFileClip(f"output/capture/video/{video_file}")
+                        audio_clip = AudioFileClip(f"{self.audio_save_path}{audio_file}")
+                        video_clip = VideoFileClip(f"{self.video_save_path}{video_file}")
 
                         if video_clip.end < audio_clip.end:
                             audio_clip = audio_clip.subclip(0, video_clip.end)
 
                         full_clip = video_clip.set_audio(audio_clip)
-                        full_clip.write_videofile(f"output/capture/segments/{video_file.replace('vid', 'seg')}", verbose=False, logger=None)
+                        full_clip.write_videofile(f"{self.segment_save_path}{video_file.replace('vid', 'seg')}", verbose=False, logger=None)
             else:
                 # Audio processing module
                 if len(audio_frames) >= self.audio_buffer_len_f:
@@ -186,7 +194,7 @@ class AudioVisualProcessor():
         # Save audio data to WAV file for checking later
         if save_wav_file:
             file_name = f"aud{self.audio_segment_index}_{frame_buffer[0][0].strftime('%H:%M:%S.%f')}_{frame_buffer[-1][0].strftime('%H:%M:%S.%f')}.wav"
-            wav_file = wave.open(f'output/capture/audio/{file_name}', 'wb')
+            wav_file = wave.open(f'{self.audio_save_path}{file_name}', 'wb')
             wav_file.setnchannels(no_channels)
             wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
             wav_file.setframerate(sample_rate)
@@ -203,7 +211,7 @@ class AudioVisualProcessor():
         if save_mp4_file:
             file_name = f"vid{self.video_segment_index}_{frame_queue[0][0].strftime('%H:%M:%S.%f')}_{frame_queue[self.video_buffer_len_f - 1][0].strftime('%H:%M:%S.%f')}.mp4"
             output_file = cv2.VideoWriter(
-                f"output/capture/video/{file_name}",
+                f"{self.video_save_path}{file_name}",
                 cv2.VideoWriter_fourcc(*'mp4v'),
                 self.video_fps,
                 self.video_shape

@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import cycle
 
-from stutter_detection.EssentiaAudioDetector import AudioDetector
-from stutter_detection.MaxVQAVideoDetector import VideoDetector
+from EssentiaAudioDetector import AudioDetector
+from MaxVQAVideoDetector import VideoDetector
 
 Object = lambda **kwargs: type("Object", (), kwargs)
 
@@ -366,6 +366,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--clean-video', action='store_true', default=False)
     parser.add_argument('-na', '--no-audio', action='store_false', default=True)
     parser.add_argument('-nv', '--no-video', action='store_false', default=True)
+    parser.add_argument('-t', '--true-timestamps', action='store_true', default=False)
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
@@ -375,6 +376,7 @@ if __name__ == '__main__':
     stutter = not args.clean_video
     audio_on = args.no_audio
     video_on = args.no_video
+    plot_true_timestamps = args.true_timestamps
 
     detector = StutterDetection(video_downsample_frames=frames, device='cpu')
 
@@ -387,7 +389,7 @@ if __name__ == '__main__':
             video_detection=video_on
         )
     else:
-        if stutter:
+        if stutter and plot_true_timestamps:
             with open(f"{path}/stutter/true-stutter-timestamps.json", 'r') as f:
                 json_data = json.load(f)
                 true_timestamps_json = json_data["timestamps"]
@@ -400,9 +402,17 @@ if __name__ == '__main__':
                 audio_detection=audio_on,
                 video_detection=video_on
             )
-        else:
+        elif not stutter:
             detector.process(
                 directory_path=f"{path}/original/",
+                time_indexed_files=True,
+                inference_epochs=epochs,
+                audio_detection=audio_on,
+                video_detection=video_on
+            )
+        else:
+            detector.process(
+                directory_path=path,
                 time_indexed_files=True,
                 inference_epochs=epochs,
                 audio_detection=audio_on,

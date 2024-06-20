@@ -4,7 +4,7 @@ import boto3
 import math
 import cv2
 
-from stutter_detection.StutterDetection import StutterDetection
+from StutterDetection import StutterDetection
 
 class CloudDetectionInterface(StutterDetection):
     def __init__(self, aws_access_key, aws_secret_key, *args, **kwargs):

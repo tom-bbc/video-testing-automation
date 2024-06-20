@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-v0_8')
 
 
-model = "vocalist"
+model = "synchformer"
 
 if model not in ["syncnet", "sparsesync", "synchformer", "vocalist"]:
     exit(0)
