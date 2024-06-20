@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-v0_8')
 
 
-model = "synchformer"
+model = "vocalist"
 
 if model not in ["syncnet", "sparsesync", "synchformer", "vocalist"]:
     exit(0)
@@ -51,22 +51,22 @@ for model in results['Model'].unique():
         y_limit = round(round(y_limit / offset_step) * offset_step + offset_step, 1)
         x_limit = np.max(np.absolute(true_offsets))
 
-        plt.xticks(fontsize='large', rotation=90)
-        plt.yticks(fontsize='large')
+        plt.xticks(fontsize='x-large', rotation=90)
+        plt.yticks(fontsize='x-large')
         ax.set_ylim([-y_limit, y_limit])
         ax.set_xticks(np.arange(-x_limit, x_limit + offset_step, offset_step))
         ax.set_yticks(np.arange(-y_limit + max(offset_step, 0.1), y_limit, max(offset_step, 0.1)))
         ax.set_ylim([-y_limit, y_limit])
-        ax.set_xlabel("True Offset (s)", fontsize='x-large')
-        ax.set_ylabel("Predicted Offset (s)", fontsize='x-large')
+        ax.set_xlabel("True Offset (s)", fontsize='xx-large')
+        ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
-        ax.set_title(f"Predictions of model '{model}' on test clip '{clip}'\n", fontsize='xx-large')
+        ax.set_title(f"Predictions of model '{model}' on test clip '{clip}'\n", fontsize=20)
         ax.grid(which='major', linewidth=1)
-        plt.legend(loc='upper left', frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='large')
+        plt.legend(loc=0, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='x-large')
 
         cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(round(np.min(results_by_clip['Likelihood']), 1), round(np.max(results_by_clip['Likelihood']), 1), 0.1))
-        cbar.set_label(label='Likelihood', fontsize='x-large')
-        cbar.ax.tick_params(labelsize='large')
+        cbar.set_label(label='Likelihood', fontsize='xx-large')
+        cbar.ax.tick_params(labelsize='x-large')
 
         plt.tight_layout()
         plt.savefig(f"{model}/{model}_{clip.replace(' ', '-')}.png")
