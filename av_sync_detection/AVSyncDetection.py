@@ -1,7 +1,9 @@
 import os
 import sys
+import time
 import glob
 import torch
+import pathlib
 import argparse
 import torchvision
 from datetime import datetime
@@ -19,7 +21,7 @@ from Synchformer.example import patch_config, decode_single_video_prediction, re
 
 class AVSyncDetection():
     def __init__(self, device='cpu'):
-        self.video_detection_results = []
+        self.video_detection_results = {}
         self.video_segment_index = 0
 
         self.offset_sec = 0.0
@@ -42,6 +44,60 @@ class AVSyncDetection():
 
         # patch config
         self.cfg = patch_config(self.cfg)
+
+        self.max_wait_for_new_files = 20
+
+    def continuous_processing(self, directory_path, time_indexed_files=False):
+        # Only allow continuous processing on directories
+        if not os.path.isdir(directory_path):
+            exit(1)
+
+        # Load the Syncformer model from checkpoint
+        self.load_model()
+
+        # Gets list of AV files from local directory
+        segment_file_paths = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+        processed_files = []
+        print(f"New files found: {segment_file_paths}")
+
+        while True:
+            if len(segment_file_paths) > 0:
+                video_path = segment_file_paths[0]
+                processed_files.append(video_path)
+
+                results = self.video_detection(video_path)
+                self.video_detection_results.update({pathlib.Path(video_path).stem: results})
+
+            if len(segment_file_paths) > 1:
+                segment_file_paths = segment_file_paths[1:]
+            else:
+                print("\nChecking for new files.")
+                new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                segment_file_paths = [f for f in new_files if f not in processed_files]
+
+                if len(segment_file_paths) == 0:
+                    retry_attempt = 0
+                    while len(segment_file_paths) == 0:
+                        if retry_attempt >= self.max_wait_for_new_files // 5:
+                            break
+
+                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.max_wait_for_new_files // 5}")
+                        retry_attempt += 1
+                        time.sleep(5)
+
+                        new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                        segment_file_paths = [f for f in new_files if f not in processed_files]
+
+                    if len(segment_file_paths) == 0:
+                        print("Shutting down processing.")
+                        break
+
+                print(f"New files found: {segment_file_paths}")
+
+        print(f"\nAll predictions:")
+        for k, v in self.video_detection_results.items():
+            print(f"{k}: {self.get_top_preds(v)}")
+
 
     def process(self, directory_path, time_indexed_files=True):
         if os.path.isfile(directory_path):
@@ -94,7 +150,7 @@ class AVSyncDetection():
         self.model.eval()
 
     def video_detection(self, vid_path):
-        print(f"\n * New video segment: {vid_path}", end='\n\n')
+        print(f"\n--------------------------------------------------------------------------------\n")
 
         # checking if the provided video has the correct frame rates
         print(f'Using video: {vid_path}')
@@ -148,6 +204,11 @@ class AVSyncDetection():
             [round(float(l), 4) for l in likelihoods]
         ))
 
+    def get_top_preds(self, preds_by_prob):
+        sorted_preds = list(sorted(preds_by_prob, key=lambda pred_and_prob: pred_and_prob[-1], reverse=True))
+        top_5_predictions = sorted_preds[:5]
+        return top_5_predictions
+
 
 if __name__ == '__main__':
     # Recieve input parameters from CLI
@@ -159,9 +220,14 @@ if __name__ == '__main__':
     parser.add_argument('directory')
     parser.add_argument('-t', '--true-timestamps', action='store_true', default=False)
     parser.add_argument('-i', '--time-indexed-files', action='store_true', default=False)
+    parser.add_argument('-s', '--streaming', action='store_true', default=False)
     parser.add_argument('-d', '--device', default='mps')
     args = parser.parse_args()
 
     # Initialise and run AV sync model on input files
     detector = AVSyncDetection(args.device)
-    detector.process(args.directory, time_indexed_files=args.time_indexed_files)
+
+    if args.streaming:
+        detector.continuous_processing(args.directory, args.time_indexed_files)
+    else:
+        detector.process(args.directory, time_indexed_files=args.time_indexed_files)
