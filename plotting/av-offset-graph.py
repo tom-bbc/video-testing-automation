@@ -21,8 +21,6 @@ elif model == "vocalist":
 results = results.loc[results['Likelihood'] > 0.000]
 # results['Likelihood'] = results['Likelihood'].apply(lambda l: (l - results['Likelihood'].min()) / (results['Likelihood'].max() - results['Likelihood'].min()))
 
-error_margin = 10000 * 0.05
-
 for model in results['Model'].unique():
     results_by_model = results.loc[results['Model'] == model]
 
@@ -38,14 +36,14 @@ for model in results['Model'].unique():
 
         # ax.plot(true_offsets, true_offsets, c='k', linestyle='--', linewidth=2.5, label='True Offset')
         ax.scatter(true_offsets, true_offsets, c='k', label='True Offset', marker='X', s=200, zorder=5)
-        predictions_plot = ax.scatter(true_offsets, predicted_offsets, c=results_by_clip['Likelihood'], cmap=colour_map, s=error_margin)
+        predictions_plot = ax.scatter(true_offsets, predicted_offsets, c=results_by_clip['Likelihood'], cmap=colour_map, s=500)
 
         for offset in results_by_clip['True Offset'].unique():
             max_likelihood = results_by_clip.loc[results_by_clip.loc[results_by_clip['True Offset'] == offset]['Likelihood'].idxmax()]['Likelihood']
             max_likelihood_prediction = results_by_clip.loc[results_by_clip.loc[results_by_clip['True Offset'] == offset]['Likelihood'].idxmax()]['Predicted Offset']
-            ax.scatter(float(offset), float(max_likelihood_prediction), s=error_margin, facecolors='none', edgecolors='k', linewidth=2)
+            ax.scatter(float(offset), float(max_likelihood_prediction), s=500, facecolors='none', edgecolors='k', linewidth=2)
 
-        ax.scatter(float(offset), float(max_likelihood_prediction), s=error_margin, facecolors='none', edgecolors='k', linewidth=2, label="Primary\nprediction")
+        ax.scatter(float(offset), float(max_likelihood_prediction), s=500, facecolors='none', edgecolors='k', linewidth=2, label="Primary\nprediction")
 
         y_limit = np.max(np.absolute(predicted_offsets))
         y_limit = round(round(y_limit / offset_step) * offset_step + offset_step, 1)
@@ -57,8 +55,15 @@ for model in results['Model'].unique():
         ax.set_xticks(np.arange(-x_limit, x_limit + offset_step, offset_step))
         ax.set_yticks(np.arange(-y_limit + max(offset_step, 0.1), y_limit, max(offset_step, 0.1)))
         ax.set_ylim([-y_limit, y_limit])
-        ax.set_xlabel("True Offset (s)", fontsize='xx-large')
-        ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
+
+        if "precision test" in clip:
+            ax.set_xticklabels(np.int64(1000.1 * np.arange(-x_limit, x_limit + offset_step, offset_step)))
+            ax.set_yticklabels(np.int64(1000.1 * np.arange(-y_limit + max(offset_step, 0.1), y_limit, max(offset_step, 0.1))))
+            ax.set_xlabel("True Offset (ms)", fontsize='xx-large')
+            ax.set_ylabel("Predicted Offset (ms)", fontsize='xx-large')
+        else:
+            ax.set_xlabel("True Offset (s)", fontsize='xx-large')
+            ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
         ax.set_title(f"Predictions of model '{model}' on test clip '{clip}'\n", fontsize=20)
         ax.grid(which='major', linewidth=1)
