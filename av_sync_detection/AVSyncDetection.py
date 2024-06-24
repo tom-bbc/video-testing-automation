@@ -5,9 +5,12 @@ import glob
 import torch
 import pathlib
 import argparse
+import numpy as np
 import torchvision
+import cmasher as cmr
 from datetime import datetime
 from omegaconf import OmegaConf
+import matplotlib.pyplot as plt
 
 sys.path.append('Synchformer/')
 sys.path.append('Synchformer/model/modules/feat_extractors/visual/')
@@ -32,6 +35,8 @@ class AVSyncDetection():
         self.afps = 16000
         self.in_size = 256
 
+        self.output_file = "av_sync_predictions.txt"
+
         # if the model does not exist try to download it from the server
         exp_name = '24-01-04T16-39-21'
         cfg_path = f'Synchformer/logs/sync_models/{exp_name}/cfg-{exp_name}.yaml'
@@ -47,7 +52,13 @@ class AVSyncDetection():
 
         self.max_wait_for_new_files = 20
 
-    def continuous_processing(self, directory_path, time_indexed_files=False):
+    def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
+        # Setup
+        if output_to_file:
+            output_file = os.path.join(directory_path, self.output_file)
+            with open(output_file, 'a') as file:
+                file.write("\n--------------------------------------------------------------------------------\n")
+
         # Only allow continuous processing on directories
         if not os.path.isdir(directory_path):
             exit(1)
@@ -65,8 +76,16 @@ class AVSyncDetection():
                 video_path = segment_file_paths[0]
                 processed_files.append(video_path)
 
-                results = self.video_detection(video_path)
-                self.video_detection_results.update({pathlib.Path(video_path).stem: results})
+                predictions = self.video_detection(video_path)
+                video_id = pathlib.Path(video_path).stem
+                self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
+
+                if output_to_file:
+                    with open(output_file, 'a') as file:
+                        file.writelines([
+                            f"\nInput video: {video_id}",
+                            f"\nPredictions: {self.get_top_preds(predictions)}\n"
+                        ])
 
             if len(segment_file_paths) > 1:
                 segment_file_paths = segment_file_paths[1:]
@@ -94,16 +113,21 @@ class AVSyncDetection():
 
                 print(f"New files found: {segment_file_paths}")
 
-        print(f"\nAll predictions:")
-        for k, v in self.video_detection_results.items():
-            print(f"{k}: {self.get_top_preds(v)}")
+            if plot:
+                self.plot(directory_path, time_indexed_files)
 
+    def process(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
+        # Setup
+        if output_to_file:
+            output_file = os.path.join(directory_path, self.output_file)
+            with open(output_file, 'a') as file:
+                file.write("\n--------------------------------------------------------------------------------\n")
 
-    def process(self, directory_path, time_indexed_files=True):
         if os.path.isfile(directory_path):
             # Permits running on single input file
             if directory_path.endswith(".mp4"):
                 segment_paths = [directory_path]
+                directory_path = os.path.dirname(directory_path)
             else:
                 exit(1)
         elif os.path.isdir(directory_path):
@@ -118,20 +142,22 @@ class AVSyncDetection():
         # Cycle through each AV file running detection algorithms
         for video_path in segment_paths:
             # Run video detection
-            if time_indexed_files:
-                timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in video_path.split('/')[-1].replace('.mp4', '').split('_')[1:]]
-
-            results = self.video_detection(video_path)
-            print(f"\n * Full results: {results}")
+            predictions = self.video_detection(video_path)
+            video_id = pathlib.Path(video_path).stem
+            self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
 
             # Add local detection results to global results timeline (compensating for segment overlap)
-            self.video_detection_results.append(results)
             self.video_segment_index += 1
 
-        # # Plot global video detection results over all clips in timeline
-        # global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[1], '%H:%M:%S.%f')
-        # global_end_time = timestamps[-1]
-        # print(f"Full timeline: {global_start_time.strftime('%H:%M:%S.%f')} => {global_end_time.strftime('%H:%M:%S.%f')}")
+            if output_to_file:
+                with open(output_file, 'a') as file:
+                    file.writelines([
+                        f"\nInput video: {video_id}",
+                        f"\nPredictions: {self.get_top_preds(predictions)}\n"
+                    ])
+
+            if plot:
+                self.plot(directory_path, time_indexed_files)
 
     def get_local_paths(self, dir, time_indexed_files=False):
         video_filenames = glob.glob(f"{dir}*.mp4")
@@ -156,10 +182,10 @@ class AVSyncDetection():
         print(f'Using video: {vid_path}')
         v, _, info = torchvision.io.read_video(vid_path, pts_unit='sec')
         _, H, W, _ = v.shape
-        if info['video_fps'] != self.vfps or info['audio_fps'] != self.afps or min(H, W) != self.in_size:
-            print(f'Reencoding. vfps: {info["video_fps"]} -> {self.vfps};', end=' ')
-            print(f'afps: {info["audio_fps"]} -> {self.afps};', end=' ')
-            print(f'{(H, W)} -> min(H, W)={self.in_size}')
+        if 'video_fps' not in info or 'audio_fps' not in info or info['video_fps'] != self.vfps or info['audio_fps'] != self.afps or min(H, W) != self.in_size:
+            # print(f'Reencoding. vfps: {info["video_fps"]} -> {self.vfps};', end=' ')
+            # print(f'afps: {info["audio_fps"]} -> {self.afps};', end=' ')
+            # print(f'{(H, W)} -> min(H, W)={self.in_size}')
             vid_path = reencode_video(vid_path, self.vfps, self.afps, self.in_size)
         else:
             print(f'Skipping reencoding. vfps: {info["video_fps"]}; afps: {info["audio_fps"]}; min(H, W)={self.in_size}')
@@ -196,18 +222,74 @@ class AVSyncDetection():
             )
 
         # simply prints the results of the prediction
-        predictions = grid
         likelihoods = decode_single_video_prediction(logits, grid, item)
 
         return list(zip(
-            [round(float(p), 1) for p in predictions],
-            [round(float(l), 4) for l in likelihoods]
+            [round(float(pred), 1) for pred in grid],
+            [round(float(prob), 4) for prob in likelihoods]
         ))
 
-    def get_top_preds(self, preds_by_prob):
+    @staticmethod
+    def get_top_preds(preds_by_prob, threshold=0.001, num_return_preds=10):
+        preds_by_prob = filter(lambda pred_and_prob: pred_and_prob[-1] > threshold, preds_by_prob)
         sorted_preds = list(sorted(preds_by_prob, key=lambda pred_and_prob: pred_and_prob[-1], reverse=True))
-        top_5_predictions = sorted_preds[:5]
-        return top_5_predictions
+        top_predictions = sorted_preds[:min(num_return_preds, len(sorted_preds))]
+        return top_predictions
+
+    def plot(self, output_dir='./', time_indexed_files=False):
+        # Plot global video detection results over all clips in timeline
+        plt.style.use('seaborn-v0_8')
+
+        x_axis_vals = []
+        x_axis_labels = []
+        y_axis = []
+        colour_by_prob = []
+
+        for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            if time_indexed_files:
+                times = (
+                    datetime.strptime(video_id.split('_')[1], '%H:%M:%S.%f'),
+                    datetime.strptime(video_id.split('_')[2], '%H:%M:%S.%f')
+                )
+
+                x_value = f"{datetime.strftime(times[0], '%H:%M:%S')} \n-> {datetime.strftime(times[1], '%H:%M:%S')}"
+            else:
+                x_value = video_id
+
+            for pred, prob in prediction:
+                x_axis_vals.append(video_index)
+                x_axis_labels.append(x_value)
+                y_axis.append(pred)
+                colour_by_prob.append(prob)
+
+        colour_map = cmr.get_sub_cmap('Greens', 0, 1)
+
+        fig, ax = plt.subplots(1, 1, figsize=(17, 9))
+        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
+
+        ax.set_xticks(x_axis_vals)
+        ax.set_xticklabels(x_axis_labels)
+        plt.xticks(fontsize='x-large')
+
+        offset_step = 0.2
+        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
+        ax.set_yticks(np.arange(-y_limit + offset_step, y_limit, offset_step))
+        plt.yticks(fontsize='x-large')
+
+        ax.set_xlabel("Video segment", fontsize='xx-large')
+        ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
+
+        ax.set_title(f"Predictions of AV sync model\n", fontsize=20)
+        ax.grid(which='major', linewidth=1, zorder=0)
+
+        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1))
+        cbar.set_label(label='Likelihood', fontsize='xx-large')
+        cbar.ax.tick_params(labelsize='x-large')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'av_sync_plot.png'))
+        print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
+        plt.close()
 
 
 if __name__ == '__main__':
@@ -218,16 +300,26 @@ if __name__ == '__main__':
     )
 
     parser.add_argument('directory')
-    parser.add_argument('-t', '--true-timestamps', action='store_true', default=False)
-    parser.add_argument('-i', '--time-indexed-files', action='store_true', default=False)
     parser.add_argument('-s', '--streaming', action='store_true', default=False)
     parser.add_argument('-d', '--device', default='mps')
+    parser.add_argument('-p', '--plot', action='store_true', default=False)
+    parser.add_argument('-t', '--time-indexed-files', action='store_true', default=False)
+    parser.add_argument('-r', '--true-timestamps', action='store_true', default=False)
+
     args = parser.parse_args()
 
     # Initialise and run AV sync model on input files
     detector = AVSyncDetection(args.device)
 
     if args.streaming:
-        detector.continuous_processing(args.directory, args.time_indexed_files)
+        detector.continuous_processing(
+            args.directory,
+            time_indexed_files=args.time_indexed_files,
+            plot=args.plot
+        )
     else:
-        detector.process(args.directory, time_indexed_files=args.time_indexed_files)
+        detector.process(
+            args.directory,
+            time_indexed_files=args.time_indexed_files,
+            plot=args.plot
+        )
