@@ -34,11 +34,16 @@ class AudioVisualProcessor():
         self.video_save_path = video_save_path
         self.segment_save_path = av_save_path
 
+        self.save_wav_file = False
+        self.save_mp4_file = False
+
     def process(self,
                 audio_module=Object(stream_open=False), audio_frames=[], audio_channels=1,
                 video_module=Object(stream_open=False, video_device=None), video_frames=[],
-                checkpoint_files=False,
-                audio_on=True, video_on=True, synchronize=True):
+                checkpoint_files=False, audio_on=True, video_on=True, synchronize=True):
+
+        self.save_wav_file = checkpoint_files
+        self.save_mp4_file = checkpoint_files
 
         if audio_on:
             print(f"         * Segment size           : {self.audio_buffer_len_f}")
@@ -64,11 +69,11 @@ class AudioVisualProcessor():
                     audio_frames, video_frames = self.sync_av_frame_queues(audio_frames, video_frames)
 
                     # Audio processing module
-                    audio_segment, audio_file = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
+                    audio_segment, audio_file = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps)
                     self.audio_segment_index += 1
 
                     # Video processing module
-                    video_segment, video_file = self.collate_video_frames(video_frames, checkpoint_files)
+                    video_segment, video_file = self.collate_video_frames(video_frames)
                     self.video_segment_index += 1
 
                     # Combine audio and video into single syncronised file
@@ -84,12 +89,12 @@ class AudioVisualProcessor():
             else:
                 # Audio processing module
                 if len(audio_frames) >= self.audio_buffer_len_f:
-                    _ = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps, checkpoint_files)
+                    self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps)
                     self.audio_segment_index += 1
 
                 # Video processing module
                 if len(video_frames) >= self.video_buffer_len_f:
-                    _ = self.collate_video_frames(video_frames, checkpoint_files)
+                    self.collate_video_frames(video_frames)
                     self.video_segment_index += 1
 
         print(f"\nProcessing module ended.")
@@ -159,7 +164,7 @@ class AudioVisualProcessor():
 
         return audio_frame_queue, video_frame_queue
 
-    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100, save_wav_file=False):
+    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100):
         file_name = ''
         frame_bytes_buffer = []
         timestamps = []
@@ -177,7 +182,7 @@ class AudioVisualProcessor():
             frame_bytes_buffer.append(frame_bytes)
 
         # Decode all frames from byte representation and arrange into timestamped segment
-        frame_buffer = []
+        frame_buffer = np.array([[]] * no_channels)
         for timestamp, frame_bytes in zip(timestamps, frame_bytes_buffer):
             frame = np.frombuffer(frame_bytes, np.int16)
 
@@ -186,29 +191,31 @@ class AudioVisualProcessor():
                 channel0 = frame[0::2]
                 channel1 = frame[1::2]
                 frame = np.array([channel0, channel1])
+                frame_buffer = np.append(frame_buffer, frame, axis=1)
             else:
                 frame = np.expand_dims(frame, axis=0)
-
-            frame_buffer.append((timestamp, frame))
+                frame_buffer = np.append(frame_buffer, frame, axis=1)
 
         # Save audio data to WAV file for checking later
-        if save_wav_file:
-            file_name = f"aud{self.audio_segment_index}_{frame_buffer[0][0].strftime('%H:%M:%S.%f')}_{frame_buffer[-1][0].strftime('%H:%M:%S.%f')}.wav"
+        if self.save_wav_file:
+            file_name = f"aud{self.audio_segment_index}_{timestamps[0].strftime('%H:%M:%S.%f')}_{timestamps[-1].strftime('%H:%M:%S.%f')}.wav"
             wav_file = wave.open(f'{self.audio_save_path}{file_name}', 'wb')
             wav_file.setnchannels(no_channels)
             wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(b''.join(frame_bytes_buffer))
             wav_file.close()
-            print(f" * Audio end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}")
+            print(f" * Audio end time: {timestamps[-1].strftime('%H:%M:%S.%f')}")
 
-        return np.array(frame_buffer, dtype=object), file_name
+        print(f" * Audio frame buffer shape: {frame_buffer.shape}")
 
-    def collate_video_frames(self, frame_queue, save_mp4_file=False):
+        return frame_buffer, file_name
+
+    def collate_video_frames(self, frame_queue):
         # Setup memory buffer of frames and output video file
         file_name = ''
         frame_buffer = []
-        if save_mp4_file:
+        if self.save_mp4_file:
             file_name = f"vid{self.video_segment_index}_{frame_queue[0][0].strftime('%H:%M:%S.%f')}_{frame_queue[self.video_buffer_len_f - 1][0].strftime('%H:%M:%S.%f')}.mp4"
             output_file = cv2.VideoWriter(
                 f"{self.video_save_path}{file_name}",
@@ -220,17 +227,15 @@ class AudioVisualProcessor():
         # Add main frames in video segment to buffer
         for _ in range(self.video_buffer_len_f - self.video_overlap_len_f):
             frame = frame_queue.popleft()
-            frame_buffer.append(frame)
-            if save_mp4_file: output_file.write(frame[1])
+            frame_buffer.append(frame[1])
+            if self.save_mp4_file: output_file.write(frame[1])
 
         # Add overlap frames to buffer
         for i in range(self.video_overlap_len_f):
             frame = frame_queue[i]
-            frame_buffer.append(frame)
-            if save_mp4_file: output_file.write(frame[1])
+            frame_buffer.append(frame[1])
+            if self.save_mp4_file: output_file.write(frame[1])
 
-        if save_mp4_file:
-            output_file.release()
-            print(f" * Video end time: {frame_buffer[-1][0].strftime('%H:%M:%S.%f')}", end='\n\n')
+        if self.save_mp4_file: output_file.release()
 
-        return np.array(frame_buffer, dtype=object), file_name
+        return frame_buffer, file_name
