@@ -62,13 +62,12 @@ if __name__ == '__main__':
     else:
         # Create segment save locations
         if save_av_files:
+            av_save_path = "output/capture/segments/"
             audio_save_path = "output/capture/audio/"
             video_save_path = "output/capture/video/"
-            av_save_path = "output/capture/segments/"
-
+            Path(av_save_path).mkdir(parents=True, exist_ok=True)
             Path(audio_save_path).mkdir(parents=True, exist_ok=True)
             Path(video_save_path).mkdir(parents=True, exist_ok=True)
-            Path(av_save_path).mkdir(parents=True, exist_ok=True)
 
         # Set up and launch audio-video stream threads
         if audio_on:
@@ -85,9 +84,16 @@ if __name__ == '__main__':
 
         # Check if user wants to run detection algorithms, or just save av segments to disk
         if audio_on and video_on:
-            processor = AudioVisualProcessor(
-                video_fps=video.frame_rate, video_shape=(video.width, video.height),
-            )
+            if save_av_files:
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height),
+                    audio_save_path=audio_save_path, video_save_path=video_save_path, av_save_path=av_save_path
+                )
+            else:
+                processor = AudioVisualProcessor(
+                    video_fps=video.frame_rate, video_shape=(video.width, video.height)
+                )
+
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
                 video_module=video, video_frames=video_frame_queue,
@@ -106,13 +112,13 @@ if __name__ == '__main__':
 
             processor.process(
                 video_module=video, video_frames=video_frame_queue,
-                checkpoint_files=True, audio_on=False
+                checkpoint_files=save_av_files, audio_on=False, synchronize=False
             )
         elif audio_on:
             processor = AudioVisualProcessor()
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                checkpoint_files=True, video_on=False
+                checkpoint_files=save_av_files, video_on=False, synchronize=False
             )
         else:
             exit(0)
