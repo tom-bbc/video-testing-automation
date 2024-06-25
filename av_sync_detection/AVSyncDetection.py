@@ -51,6 +51,7 @@ class AVSyncDetection():
         self.cfg = patch_config(self.cfg)
 
         self.system_timeout = 30
+        self.retry_wait_time = 10
 
     def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
         # Setup
@@ -97,12 +98,12 @@ class AVSyncDetection():
                 if len(segment_file_paths) == 0:
                     retry_attempt = 0
                     while len(segment_file_paths) == 0:
-                        if retry_attempt >= self.system_timeout // 5:
+                        if retry_attempt >= self.system_timeout // self.retry_wait_time:
                             break
 
-                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.system_timeout // 5}")
+                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.system_timeout // self.retry_wait_time}")
                         retry_attempt += 1
-                        time.sleep(5)
+                        time.sleep(self.retry_wait_time)
 
                         new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
                         segment_file_paths = [f for f in new_files if f not in processed_files]
@@ -240,6 +241,9 @@ class AVSyncDetection():
         # Plot global video detection results over all clips in timeline
         plt.style.use('seaborn-v0_8')
 
+        if len(self.video_detection_results) == 0:
+            return
+
         x_axis_vals = []
         x_axis_labels = []
         y_axis = []
@@ -252,7 +256,7 @@ class AVSyncDetection():
                     datetime.strptime(video_id.split('_')[2], '%H:%M:%S.%f')
                 )
 
-                x_value = f"{datetime.strftime(times[0], '%H:%M:%S')} \n-> {datetime.strftime(times[1], '%H:%M:%S')}"
+                x_value = f"     {datetime.strftime(times[0], '%H:%M:%S')} \n-> {datetime.strftime(times[1], '%H:%M:%S')}"
             else:
                 x_value = video_id
 
@@ -262,13 +266,14 @@ class AVSyncDetection():
                 y_axis.append(pred)
                 colour_by_prob.append(prob)
 
-        fig, ax = plt.subplots(1, 1, figsize=(17, 9))
+        fig, ax = plt.subplots(1, 1, figsize=(20, 9))
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
 
+        plt.xticks(fontsize='small', rotation=90)
         ax.set_xticks(x_axis_vals)
-        ax.set_xticklabels(x_axis_labels)
-        plt.xticks(fontsize='x-large')
+        if len(np.unique(x_axis_labels)) < 35: ax.set_xticklabels(x_axis_labels)
+
 
         offset_step = 0.2
         y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
@@ -299,11 +304,10 @@ if __name__ == '__main__':
     )
 
     parser.add_argument('directory')
-    parser.add_argument('-s', '--streaming', action='store_true', default=False)
-    parser.add_argument('-d', '--device', default='cpu')
     parser.add_argument('-p', '--plot', action='store_true', default=False)
+    parser.add_argument('-s', '--streaming', action='store_true', default=False)
     parser.add_argument('-t', '--time-indexed-files', action='store_true', default=False)
-    parser.add_argument('-r', '--true-timestamps', action='store_true', default=False)
+    parser.add_argument('-d', '--device', default='cpu')
 
     args = parser.parse_args()
 
