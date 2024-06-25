@@ -9,3 +9,7 @@ boto3
 tensorflow
 Pillow==9.2.0
 moviepy
+omegaconf==2.0.6
+av==10.0
+einops
+timm==0.6.12
