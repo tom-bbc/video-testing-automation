@@ -1,12 +1,12 @@
 import signal
-from collections import deque
-from threading import Thread
-import sounddevice
 import argparse
+import sounddevice
 from pathlib import Path
+from threading import Thread
+from collections import deque
 
-from AudioVisualStreams import AudioStream, VideoStream
 from AudioVisualProcessor import AudioVisualProcessor
+from AudioVisualStreams import AudioStream, VideoStream
 
 
 def signal_handler(sig, frame):

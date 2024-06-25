@@ -141,15 +141,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--vid_path', help='A path to .mp4 video', default='')
+    parser.add_argument('--vid_path', help='A path to .mp4 video', required=True)
     parser.add_argument('--exp_name', help='In a format: xx-xx-xxTxx-xx-xx', default='24-01-04T16-39-21')
     parser.add_argument('--offset_sec', type=float, default=0.0)
     parser.add_argument('--v_start_i_sec', type=float, default=0.0)
-    parser.add_argument('--device', default='mps')
+    parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
-
-    true_offset = "p1"
-    video_source = "live-lounge"
-    args.vid_path = f"../../../datasets/tv/{video_source}/offset-{true_offset}s.mp4"
 
     main(args)

@@ -1,4 +1,5 @@
 import torch
+import argparse
 import torchvision
 from omegaconf import OmegaConf
 
@@ -97,17 +98,17 @@ def main(exp_name, vid_path, vfps, afps, device, input_size, v_start_i_sec, offs
 
 
 if __name__ == '__main__':
-    exp_name = '23-02-26T22-31-22'
-    vid_path = './data/vggsound/h264_video_25fps_256side_16000hz_aac/3qesirWAGt4_20000_30000.mp4'  # dog barking
-    device = 'cpu'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--vid_path', help='A path to .mp4 video', required=True)
+    parser.add_argument('--exp_name', help='In a format: xx-xx-xxTxx-xx-xx', default='23-02-26T22-31-22')
+    parser.add_argument('--offset_sec', type=float, default=0.0, help="how early audio should start than the visual track")
+    parser.add_argument('--v_start_i_sec', type=float, default=0.0, help="start of the visual track")
+    parser.add_argument('--device', default='cpu')
+    args = parser.parse_args()
 
     # target values for an input video (the video will be reencoded to match these)
     vfps = 25
     afps = 16000
     input_size = 256
 
-    # you may artificially offset the audio and visual tracks:
-    v_start_i_sec = 0.0  # start of the visual track
-    offset_sec = 1.6  # how early audio should start than the visual track
-
-    main(exp_name, vid_path, vfps, afps, device, input_size, v_start_i_sec, offset_sec)
+    main(args.exp_name, args.vid_path, vfps, afps, args.device, input_size, args.v_start_i_sec, args.offset_sec)

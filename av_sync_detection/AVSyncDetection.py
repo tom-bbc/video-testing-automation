@@ -19,7 +19,7 @@ from Synchformer.dataset.dataset_utils import get_video_and_audio
 from Synchformer.dataset.transforms import make_class_grid
 from Synchformer.utils.utils import check_if_file_exists_else_download
 from Synchformer.scripts.train_utils import get_model, get_transforms, prepare_inputs
-from Synchformer.example import patch_config, decode_single_video_prediction, reencode_video, main
+from Synchformer.example import patch_config, decode_single_video_prediction, reencode_video
 
 
 class AVSyncDetection():
@@ -300,7 +300,7 @@ if __name__ == '__main__':
 
     parser.add_argument('directory')
     parser.add_argument('-s', '--streaming', action='store_true', default=False)
-    parser.add_argument('-d', '--device', default='mps')
+    parser.add_argument('-d', '--device', default='cpu')
     parser.add_argument('-p', '--plot', action='store_true', default=False)
     parser.add_argument('-t', '--time-indexed-files', action='store_true', default=False)
     parser.add_argument('-r', '--true-timestamps', action='store_true', default=False)

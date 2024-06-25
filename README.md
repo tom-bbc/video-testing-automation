@@ -1,8 +1,97 @@
+# General Setup
+
+* Firstly install external submodules: `git submodule update --init --recursive`
+* Install requirements using pip: `pip install -r requirements.txt`
+* Audio and video capture module is located within directory **capture**
+* AV synchronisation detection module is located within directory **av_sync_detection**
+* Stutter detection module is located within directory **stutter_detection**
+
+
+# AV Capture System
+
+* Setup mode to check input audio/video sources: `python capture/capture.py --setup-mode`
+* Run capture pipeline to generate AV files: `python capture/capture.py -a AUDIO_SOURCE -v VIDEO_SOURCE --save-files`
+* This capture audio and video in 10s segments and save them to the local directory **output/capture/**
+* Halt capture by interrupting execution
+
+
+
+# AV Synchronisation Detection
+
+## Complete Detection System
+
+* The complete build of the AV sync detection system uses Synchformer to predict AV offsets (as this was found to be the most accurate model during experimentation).
+* Detection can be completed over a video file or directory of files.
+* Can also enable **streaming** mode that continuously checks a directory for files and processes as they are added. This can be used in conjunction with the capture system to perform AV sync detection in real-time.
+* Run inference on static files at **PATH**: `python AVSyncDetection.py PATH --plot`
+* Run in streaming mode on captured video segments: `python AVSyncDetection.py ../output/capture/segments/ -stp`
+
+
+## Experiments
+
+### Synchformer
+
+* Move inference script `synchformer_inference.py` into Synchformer submodule directory (and `cd` into this directory)
+* Install requirements: `pip install omegaconf==2.0.6 av==10.0 einops timm==0.6.12`
+* Run inference on MP4 file at **PATH**: `python synchformer_inference.py --vid_path PATH --device DEVICE`
+
+
+### SparseSync
+
+* Move inference script `sparsesync_inference.py` into SparseSync submodule directory (and `cd` into this directory)
+* Install requirements: `pip install torch torchaudio torchvision omegaconf einops av`
+* Run inference on MP4 file at **PATH**: `python sparsesync_inference.py --vid_path PATH --device DEVICE`
+
+
+### SyncNet
+
+#### Install
+
+* Update the requirement `scenedetect` in file `requirements.txt` to the latest version using `scenedetect>=0.6.3`
+* Then install requirements: `pip install -r requirements.txt`
+* Download pre-trained SyncNet model by running `./download_model.sh`
+* In file `SyncNetInstance.py`, remove instances of `.cuda()`
+* In file `run_pipeline.py`, change device of face detection model by swapping line 187 to `DET = S3FD(device='cpu')`
+* In file `detectors/s3fd/box_utils.py`, update depreciated `np.int` reference on line 38 to just `int`
+
+#### Run
+
+* Move inference script `syncnet_inference.py` into syncnet_python submodule directory (and `cd` into this directory)
+* Run inference on MP4 file at **PATH**: `python syncnet_inference.py --videofile PATH`
+
+
+### Vocalist
+
+#### Install (for cpu)
+
+* In `models/model.py` add `device` parameter to `init` method of `SyncTransformer` class.
+* Pass the device parameter to all `TransformerEncoder` instances.
+* In `models/transformer_encoder.py` add `device` parameter to `init` method of `TransformerEncoder` and `TransformerEncoderLayer` classes.
+* Within the `TransformerEncoder` init method, pass the device parameter to all `TransformerEncoderLayer` instances.
+* Within the `TransformerEncoderLayer` init method, add `self.device` as a field initialised from the input parameter.
+* Add `self` to the inputs of the `buffered_future_mask` method of `TransformerEncoderLayer` and replace the inner `.cuda()` method call with `.to(self.device)`
+* Ensure the attention mask is on the same device by adding `mask.to(self.device)` after line 153 of file `models/transformer_encoder.py`
+* In `test_lrs2.py` add `data_root` as a `init` method parameter of the `Dataset` class, and pass this to the `get_image_list` method call.
+* There is an issue with the attention mask, you must force i=the mask to dimension `16x5` by adding lines `dim1 = 5` and `dim2 = 16` within the `buffered_future_mask` of file `models/transformer_encoder.py`. You must then add a second try clause at line 120 within the file `models/multihead_attention.py` when the mask is used to try using the transpose through the statement `attn_weights += attn_mask.T.unsqueeze(0)`.
+
+* `brew install cmake` and `pip install dlib`
+* `pip install "librosa=0.9.1"`
+
+
+* To use MPS device on Mac, must update permitted devices in file `Wav2Lip/face_detection/detection/core.py` by including `'mps' not in device` in if statement at line 27.
+
+#### Run
+
+* Wav2Lip preprocessing: `python wav2lip_preprocessing.py --results_dir prepared_data/putin-10s --input_videos ../../data/putin-10s.mp4`
+* AV sync detection: `PYTORCH_ENABLE_MPS_FALLBACK=1 python vocalist_inference.py --input_data prepared_data/putin-10s`
+
+
+
 # Stutter Detection
 
 ## Installing
 
-### Installing Video Detection Module
+### Installing Video Stutter Module
 1. Install ExplainableVQA deps:
 ```
 git submodule update --init --recursive
@@ -47,48 +136,3 @@ options:
   -a AUDIO, --audio AUDIO
   -v VIDEO, --video VIDEO
 ```
-
-
-# AV Synchronisation Detection
-
-## SyncNet
-
-### Install (for cpu)
-
-* Update the requirement `scenedetect` in file `requirements.txt` to the latest version using `scenedetect>=0.6.3`
-* Then install requirements: `pip install -r requirements.txt`
-* Download pre-trained SyncNet model by running `./download_model.sh`
-* In file `SyncNetInstance.py`, remove instances of `.cuda()`
-* In file `run_pipeline.py`, change device of face detection model by swapping line 187 to `DET = S3FD(device='cpu')`
-* In file `detectors/s3fd/box_utils.py`, update depreciated `np.int` reference on line 38 to just `int`
-
-### Run
-
-* Demo script: `python demo_syncnet.py --videofile data/example.avi --tmp_dir output`
-* Using my inference script (after moving into syncnet_python dir): `python syncnet_inference.py --videofile ../data/putin-offset.mp4 --reference putin-offset --data_dir output`
-
-
-## Vocalist
-
-### Install (for cpu)
-
-* In `models/model.py` add `device` parameter to `init` method of `SyncTransformer` class.
-* Pass the device parameter to all `TransformerEncoder` instances.
-* In `models/transformer_encoder.py` add `device` parameter to `init` method of `TransformerEncoder` and `TransformerEncoderLayer` classes.
-* Within the `TransformerEncoder` init method, pass the device parameter to all `TransformerEncoderLayer` instances.
-* Within the `TransformerEncoderLayer` init method, add `self.device` as a field initialised from the input parameter.
-* Add `self` to the inputs of the `buffered_future_mask` method of `TransformerEncoderLayer` and replace the inner `.cuda()` method call with `.to(self.device)`
-* Ensure the attention mask is on the same device by adding `mask.to(self.device)` after line 153 of file `models/transformer_encoder.py`
-* In `test_lrs2.py` add `data_root` as a `init` method parameter of the `Dataset` class, and pass this to the `get_image_list` method call.
-* There is an issue with the attention mask, you must force i=the mask to dimension `16x5` by adding lines `dim1 = 5` and `dim2 = 16` within the `buffered_future_mask` of file `models/transformer_encoder.py`. You must then add a second try clause at line 120 within the file `models/multihead_attention.py` when the mask is used to try using the transpose through the statement `attn_weights += attn_mask.T.unsqueeze(0)`.
-
-* `brew install cmake` and `pip install dlib`
-* `pip install "librosa=0.9.1"`
-
-
-* To use MPS device on Mac, must update permitted devices in file `Wav2Lip/face_detection/detection/core.py` by including `'mps' not in device` in if statement at line 27.
-
-### Run
-
-* Wav2Lip preprocessing: `python wav2lip_preprocessing.py --results_dir prepared_data/putin-10s --input_videos ../../data/putin-10s.mp4`
-* AV sync detection: `PYTORCH_ENABLE_MPS_FALLBACK=1 python vocalist_inference.py --input_data prepared_data/putin-10s`
