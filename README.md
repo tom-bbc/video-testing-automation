@@ -7,7 +7,6 @@
 * Stutter detection module is located within directory **stutter_detection**
 
 <br>
-<br>
 
 # AV Capture System
 
@@ -34,7 +33,6 @@ options:
 ```
 
 <br>
-<br>
 
 # AV Synchronisation Detection
 
@@ -46,7 +44,24 @@ options:
 * Run inference on static files at **PATH**: `python AVSyncDetection.py PATH --plot`
 * Run in streaming mode on captured video segments: `python AVSyncDetection.py ../output/capture/segments/ -stp`
 
-<br>
+#### General CLI
+
+```
+usage: AVSyncDetection.py [-h] [-p] [-s] [-t] [-d DEVICE] directory
+
+Run Synchformer AV sync offset detection model over local AV segments.
+
+positional arguments:
+  directory
+
+options:
+  -h, --help            show this help message and exit
+  -p, --plot
+  -s, --streaming
+  -t, --time-indexed-files
+  -d DEVICE, --device DEVICE
+```
+
 
 ## Experiments
 
@@ -107,7 +122,6 @@ options:
 * AV sync detection: `PYTORCH_ENABLE_MPS_FALLBACK=1 python vocalist_inference.py --input_data prepared_data/putin-10s`
 
 <br>
-<br>
 
 # Stutter Detection
 
@@ -140,7 +154,6 @@ mkdir ExplainableVQA/DOVER/pretrained_weights
 wget https://github.com/VQAssessment/DOVER/releases/download/v0.1.0/DOVER.pth -P ExplainableVQA/DOVER/pretrained_weights/
 ```
 
-<br>
 
 ## Running
 
@@ -159,10 +172,10 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -f FRAMES, --frames FRAMES
-  -e EPOCHS, --epochs EPOCHS
-  -c, --clean-video
   -na, --no-audio
   -nv, --no-video
+  -c, --clean-video
   -t, --true-timestamps
+  -f FRAMES, --frames FRAMES
+  -e EPOCHS, --epochs EPOCHS
 ```

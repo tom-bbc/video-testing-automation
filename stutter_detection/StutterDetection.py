@@ -361,12 +361,12 @@ if __name__ == '__main__':
     )
 
     parser.add_argument("directory")
-    parser.add_argument('-f', '--frames', type=int, default=256)
-    parser.add_argument('-e', '--epochs', type=int, default=3)
-    parser.add_argument('-c', '--clean-video', action='store_true', default=False)
     parser.add_argument('-na', '--no-audio', action='store_false', default=True)
     parser.add_argument('-nv', '--no-video', action='store_false', default=True)
+    parser.add_argument('-c', '--clean-video', action='store_true', default=False)
     parser.add_argument('-t', '--true-timestamps', action='store_true', default=False)
+    parser.add_argument('-f', '--frames', type=int, default=256)
+    parser.add_argument('-e', '--epochs', type=int, default=3)
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
