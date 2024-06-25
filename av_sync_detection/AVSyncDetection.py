@@ -50,7 +50,7 @@ class AVSyncDetection():
         # patch config
         self.cfg = patch_config(self.cfg)
 
-        self.max_wait_for_new_files = 20
+        self.system_timeout = 30
 
     def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
         # Setup
@@ -97,10 +97,10 @@ class AVSyncDetection():
                 if len(segment_file_paths) == 0:
                     retry_attempt = 0
                     while len(segment_file_paths) == 0:
-                        if retry_attempt >= self.max_wait_for_new_files // 5:
+                        if retry_attempt >= self.system_timeout // 5:
                             break
 
-                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.max_wait_for_new_files // 5}")
+                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.system_timeout // 5}")
                         retry_attempt += 1
                         time.sleep(5)
 
@@ -262,9 +262,8 @@ class AVSyncDetection():
                 y_axis.append(pred)
                 colour_by_prob.append(prob)
 
-        colour_map = cmr.get_sub_cmap('Greens', 0, 1)
-
         fig, ax = plt.subplots(1, 1, figsize=(17, 9))
+        colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
 
         ax.set_xticks(x_axis_vals)

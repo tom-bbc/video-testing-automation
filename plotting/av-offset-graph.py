@@ -32,7 +32,7 @@ for model in results['Model'].unique():
         true_offsets = np.array(results_by_clip['True Offset'], dtype=float)
         offset_step = round(abs(np.unique(true_offsets)[0]) - abs(np.unique(true_offsets)[1]), 2)
         predicted_offsets = np.array(results_by_clip['Predicted Offset'], dtype=float)
-        colour_map = cmr.get_sub_cmap('Greens', min(results_by_clip['Likelihood']), max(results_by_clip['Likelihood']))
+        colour_map = cmr.get_sub_cmap('Greens', start=np.min(results_by_clip['Likelihood']), stop=np.max(results_by_clip['Likelihood']))
 
         # ax.plot(true_offsets, true_offsets, c='k', linestyle='--', linewidth=2.5, label='True Offset')
         ax.scatter(true_offsets, true_offsets, c='k', label='True Offset', marker='X', s=200, zorder=5)
