@@ -6,6 +6,8 @@
 * AV synchronisation detection module is located within directory **av_sync_detection**
 * Stutter detection module is located within directory **stutter_detection**
 
+<br>
+<br>
 
 # AV Capture System
 
@@ -14,7 +16,25 @@
 * This capture audio and video in 10s segments and save them to the local directory **output/capture/**
 * Halt capture by interrupting execution
 
+#### General CLI
 
+```
+usage: capture.py [-h] [-s] [-na] [-nv] [-f] [-a AUDIO] [-v VIDEO]
+
+Capture audio and video streams from a camera/microphone and split into segments for processing.
+
+options:
+  -h, --help            show this help message and exit
+  -s, --setup-mode
+  -na, --no-audio
+  -nv, --no-video
+  -f, --save-files
+  -a AUDIO, --audio AUDIO
+  -v VIDEO, --video VIDEO
+```
+
+<br>
+<br>
 
 # AV Synchronisation Detection
 
@@ -26,6 +46,7 @@
 * Run inference on static files at **PATH**: `python AVSyncDetection.py PATH --plot`
 * Run in streaming mode on captured video segments: `python AVSyncDetection.py ../output/capture/segments/ -stp`
 
+<br>
 
 ## Experiments
 
@@ -85,7 +106,8 @@
 * Wav2Lip preprocessing: `python wav2lip_preprocessing.py --results_dir prepared_data/putin-10s --input_videos ../../data/putin-10s.mp4`
 * AV sync detection: `PYTORCH_ENABLE_MPS_FALLBACK=1 python vocalist_inference.py --input_data prepared_data/putin-10s`
 
-
+<br>
+<br>
 
 # Stutter Detection
 
@@ -118,21 +140,29 @@ mkdir ExplainableVQA/DOVER/pretrained_weights
 wget https://github.com/VQAssessment/DOVER/releases/download/v0.1.0/DOVER.pth -P ExplainableVQA/DOVER/pretrained_weights/
 ```
 
+<br>
+
 ## Running
+
+* Run inference on directory at **PATH**: `python StutterDetection.py PATH`
+* This will timestamps of the any stuttering found in the audio or video files.
 
 ### General CLI
 
 ```
-usage: python main.py [-h] [-s] [-na] [-nv] [-a AUDIO] [-v VIDEO] [-f]
+usage: StutterDetection.py [-h] [-f FRAMES] [-e EPOCHS] [-c] [-na] [-nv] [-t] directory
 
-Capture audio and video streams from a camera/microphone and process detection algorithms over this content.
+Run audio and video stutter detection algorithms over local AV segments.
+
+positional arguments:
+  directory
 
 options:
   -h, --help            show this help message and exit
-  -s, --setup-mode
+  -f FRAMES, --frames FRAMES
+  -e EPOCHS, --epochs EPOCHS
+  -c, --clean-video
   -na, --no-audio
   -nv, --no-video
-  -f, --save-files
-  -a AUDIO, --audio AUDIO
-  -v VIDEO, --video VIDEO
+  -t, --true-timestamps
 ```
