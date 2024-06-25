@@ -51,7 +51,7 @@ if __name__ == '__main__':
     global audio, video
 
     # Set up the handler for Ctrl+C interrupt
-    signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGINT, signal_handler)
 
     if setup_mode_only:
         # Set up stream to show content but do no processing
