@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import time
 import glob
 import torch
@@ -74,6 +75,8 @@ class AVSyncDetection():
 
         while True:
             if len(segment_file_paths) > 0:
+                if len(segment_file_paths) == 1: time.sleep(3)
+
                 video_path = segment_file_paths[0]
                 processed_files.append(video_path)
 
@@ -179,20 +182,18 @@ class AVSyncDetection():
     def video_detection(self, vid_path):
         print(f"\n--------------------------------------------------------------------------------\n")
 
+        if not os.path.isfile(vid_path):
+            time.sleep(5)
+
         # checking if the provided video has the correct frame rates
         print(f'Using video: {vid_path}')
         v, _, info = torchvision.io.read_video(vid_path, pts_unit='sec')
         _, H, W, _ = v.shape
         if 'video_fps' not in info or 'audio_fps' not in info or info['video_fps'] != self.vfps or info['audio_fps'] != self.afps or min(H, W) != self.in_size:
-            # print(f'Reencoding. vfps: {info["video_fps"]} -> {self.vfps};', end=' ')
-            # print(f'afps: {info["audio_fps"]} -> {self.afps};', end=' ')
-            # print(f'{(H, W)} -> min(H, W)={self.in_size}')
             vid_path = reencode_video(vid_path, self.vfps, self.afps, self.in_size)
         else:
             print(f'Skipping reencoding. vfps: {info["video_fps"]}; afps: {info["audio_fps"]}; min(H, W)={self.in_size}')
 
-        # load visual and audio streams
-        # rgb: (Tv, 3, H, W) in [0, 225], audio: (Ta,) in [-1, 1]
         rgb, audio, meta = get_video_and_audio(vid_path, get_meta=True)
 
         # making an item (dict) to apply transformations
@@ -266,14 +267,14 @@ class AVSyncDetection():
                 y_axis.append(pred)
                 colour_by_prob.append(prob)
 
-        fig, ax = plt.subplots(1, 1, figsize=(20, 9))
+        plot_width = max(math.ceil(len(np.unique(x_axis_labels)) * 0.7), 13)
+        fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
 
         plt.xticks(fontsize='small', rotation=90)
         ax.set_xticks(x_axis_vals)
-        if len(np.unique(x_axis_labels)) < 35: ax.set_xticklabels(x_axis_labels)
-
+        ax.set_xticklabels(x_axis_labels)
 
         offset_step = 0.2
         y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
@@ -286,7 +287,7 @@ class AVSyncDetection():
         ax.set_title(f"Predictions of AV sync model\n", fontsize=20)
         ax.grid(which='major', linewidth=1, zorder=0)
 
-        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1))
+        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03)
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 

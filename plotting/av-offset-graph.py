@@ -69,7 +69,7 @@ for model in results['Model'].unique():
         ax.grid(which='major', linewidth=1)
         plt.legend(loc=0, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='x-large')
 
-        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(round(np.min(results_by_clip['Likelihood']), 1), round(np.max(results_by_clip['Likelihood']), 1), 0.1))
+        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', fraction=0.05, ticks=np.arange(round(np.min(results_by_clip['Likelihood']), 1), round(np.max(results_by_clip['Likelihood']), 1), 0.1))
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 
