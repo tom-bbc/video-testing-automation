@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pyaudio
 import wave
-from moviepy.editor import VideoFileClip, AudioFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
 
 
 Object = lambda **kwargs: type("Object", (), kwargs)
@@ -11,8 +11,8 @@ Object = lambda **kwargs: type("Object", (), kwargs)
 
 class AudioVisualProcessor():
     def __init__(self, video_fps=30, video_shape=(), audio_fps=44100, audio_chunk_size=1024,
-                 audio_buffer_len_s=10, audio_overlap_len_s=1,
-                 video_buffer_len_s=10, video_overlap_len_s=1,
+                 audio_buffer_len_s=20, audio_overlap_len_s=1,
+                 video_buffer_len_s=20, video_overlap_len_s=1,
                  audio_save_path="output/capture/audio/",
                  video_save_path="output/capture/video/",
                  av_save_path="output/capture/segments/"
@@ -59,17 +59,17 @@ class AudioVisualProcessor():
         print(f"Start of audio-visual processing", end='\n\n')
 
         while (audio_module.stream_open or video_module.stream_open) or \
-            (len(audio_frames) >= 2 * self.audio_buffer_len_f) or \
-            (len(video_frames) >= 2 * self.video_buffer_len_f):
+            (len(audio_frames) >= 1.5 * self.audio_buffer_len_f) or \
+            (len(video_frames) >= 1.5 * self.video_buffer_len_f):
 
             # Syncronise audio and video frame queues
             if synchronize:
-                if audio_on and video_on and len(audio_frames) >= 2 * self.audio_buffer_len_f and len(video_frames) >= 2 * self.video_buffer_len_f:
+                if audio_on and video_on and len(audio_frames) >= 1.5 * self.audio_buffer_len_f and len(video_frames) >= 1.5 * self.video_buffer_len_f:
                     # Syncronisation
                     audio_frames, video_frames = self.sync_av_frame_queues(audio_frames, video_frames)
 
                     # Audio processing module
-                    collated_audio = self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps)
+                    collated_audio = self.collate_audio_frames(audio_frames, audio_channels)
                     audio_file = collated_audio['file']
                     self.audio_segment_index += 1
 
@@ -81,17 +81,26 @@ class AudioVisualProcessor():
                     # Combine audio and video into single syncronised file
                     if checkpoint_files:
                         audio_clip = AudioFileClip(f"{self.audio_save_path}{audio_file}")
-                        video_clip = VideoFileClip(f"{self.video_save_path}{video_file}")
+                        video_clip = VideoFileClip(f"{self.video_save_path}{video_file}", audio=False)
 
                         if video_clip.end < audio_clip.end:
                             audio_clip = audio_clip.subclip(0, video_clip.end)
+                        elif video_clip.end > audio_clip.end:
+                            video_clip = video_clip.subclip(0, audio_clip.end)
 
                         full_clip = video_clip.set_audio(audio_clip)
-                        full_clip.write_videofile(f"{self.segment_save_path}{video_file.replace('vid', 'seg')}", verbose=False, logger=None)
+                        full_clip = full_clip.set_fps(self.video_fps)
+                        full_clip.write_videofile(
+                            f"{self.segment_save_path}{video_file.replace('vid', 'seg')}",
+                            fps=self.video_fps,
+                            audio_fps=self.audio_fps,
+                            audio_codec='pcm_s16le',
+                            verbose=False, logger=None
+                        )
             else:
                 # Audio processing module
                 if len(audio_frames) >= self.audio_buffer_len_f:
-                    self.collate_audio_frames(audio_frames, audio_channels, self.audio_fps)
+                    self.collate_audio_frames(audio_frames, audio_channels)
                     self.audio_segment_index += 1
 
                 # Video processing module
@@ -114,7 +123,7 @@ class AudioVisualProcessor():
             current_audio_idx = 1
 
             while current_audio_idx < len(audio_frame_queue):
-                audio_timestamp, _ = audio_frame_queue[current_audio_idx]
+                audio_timestamp = audio_frame_queue[current_audio_idx][0]
 
                 if audio_timestamp == video_start_time:
                     # Found an exact match between audio and video start times
@@ -136,13 +145,13 @@ class AudioVisualProcessor():
             current_video_idx = 1
 
             while current_video_idx < len(video_frame_queue):
-                video_timestamp, _ = video_frame_queue[current_video_idx]
+                video_timestamp = video_frame_queue[current_video_idx][0]
 
                 if video_timestamp == audio_start_time:
                     # Found an exact match between audio and video start times
                     new_video_start_idx = current_video_idx
                     break
-                elif audio_timestamp > video_start_time:
+                elif video_timestamp > video_start_time:
                     # If we have passed the audio start time, find the closest video frame time before or after
                     prev_video_timestamp, _ = video_frame_queue[current_video_idx - 1]
                     if abs(audio_start_time - prev_video_timestamp) <= abs(audio_start_time - video_timestamp):
@@ -166,7 +175,7 @@ class AudioVisualProcessor():
 
         return audio_frame_queue, video_frame_queue
 
-    def collate_audio_frames(self, frame_queue, no_channels=1, sample_rate=44100):
+    def collate_audio_frames(self, frame_queue, no_channels=1):
         file_name = ''
         frame_bytes_buffer = []
         frame_buffer = np.array([[]] * no_channels)
@@ -189,7 +198,7 @@ class AudioVisualProcessor():
             wav_file = wave.open(f'{self.audio_save_path}{file_name}', 'wb')
             wav_file.setnchannels(no_channels)
             wav_file.setsampwidth(pyaudio.get_sample_size(pyaudio.paInt16))
-            wav_file.setframerate(sample_rate)
+            wav_file.setframerate(self.audio_fps)
             wav_file.writeframes(b''.join(frame_bytes_buffer))
             wav_file.close()
         else:
