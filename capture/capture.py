@@ -1,3 +1,4 @@
+import os
 import signal
 import argparse
 import sounddevice
@@ -28,11 +29,13 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--split-av-tracks', action='store_true', default=False)
     parser.add_argument('-a', '--audio', type=int, default=0)
     parser.add_argument('-v', '--video', type=int, default=0)
+    parser.add_argument('-o', '--output-path', type=str, default='output/capture/')
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
     audio_device = args.audio
     video_device = args.video
+    output_path = args.output_path
     save_av_files = True
 
     global audio_on, video_on, setup_mode_only, audio, video
@@ -63,7 +66,7 @@ if __name__ == '__main__':
     elif not split_audio_video:
         # Generate segment output location
         if save_av_files:
-            av_save_path = "output/capture/segments/"
+            av_save_path = os.path.join(output_path, "segments/")
             Path(av_save_path).mkdir(parents=True, exist_ok=True)
 
         # Set up and launch combined audio-video stream in a thread
@@ -78,8 +81,8 @@ if __name__ == '__main__':
     else:
         # Generate segment output locations
         if save_av_files:
-            audio_save_path = "output/capture/audio/"
-            video_save_path = "output/capture/video/"
+            audio_save_path = os.path.join(output_path, "audio/")
+            video_save_path = os.path.join(output_path, "video/")
             Path(audio_save_path).mkdir(parents=True, exist_ok=True)
             Path(video_save_path).mkdir(parents=True, exist_ok=True)
 
