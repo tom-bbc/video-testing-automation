@@ -1,6 +1,50 @@
-import datetime
 import cv2
+import ffmpeg
 import pyaudio
+import datetime
+
+
+class CombinedCaptureStream():
+    def __init__(self, audio_source=0, video_source=0, checkpoint_path='',
+                 segment_length_s=10):
+
+        self.audio_device = audio_source
+        self.video_device = video_source
+
+        self.video_fps = 30
+        self.video_width = 1280
+        self.video_height = 720
+
+        self.save_path = checkpoint_path
+        self.segment_length_s = segment_length_s
+
+    def launch(self, total_processing_time=None):
+        print("Combined audio & video capture stream launched. Press Q to quit.")
+
+        input_device = f'{self.video_device}:{self.audio_device}'
+        video_shape = f'{self.video_width}x{self.video_height}'
+
+        if str(total_processing_time).isnumeric():
+            stream = ffmpeg.input(
+                input_device, t=total_processing_time,
+                format='avfoundation', pixel_format='yuyv422',
+                framerate=self.video_fps, s=video_shape
+            )
+        else:
+            stream = ffmpeg.input(
+                input_device,
+                format='avfoundation', pixel_format='yuyv422',
+                framerate=self.video_fps, s=video_shape
+            )
+
+        stream = ffmpeg.output(
+            stream, 'segment-%d.mp4',
+            f='segment', segment_time=self.segment_length_s,
+            reset_timestamps=1, flags='+global_header',
+            sc_threshold=0, g=self.segment_length_s, force_key_frames=f'expr:gte(t, n_forced * {self.segment_length_s})'
+        )
+
+        ffmpeg.run(stream, quiet=False)
 
 
 class AudioStream():
