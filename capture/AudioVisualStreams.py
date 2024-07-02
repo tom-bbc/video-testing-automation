@@ -27,28 +27,25 @@ class CombinedCaptureStream():
         index = 0
 
         while True:
-            print(f"Opening capture stream #{index}")
             logfile.write(f"\nCapture stream #{index} \n\n")
             logfile.flush()
 
-            output_path = os.path.join(self.save_path, f"segment-{index}.mp4")
-
             # Setup stream
-            command = [
+            start_timestamp = datetime.datetime.now()
+            end_timestamp = start_timestamp + datetime.timedelta(seconds=self.segment_length_s)
+            file_name = f"seg{index}_{start_timestamp.strftime('%H:%M:%S.%f')}_{end_timestamp.strftime('%H:%M:%S.%f')}.mp4"
+            output_path = os.path.join(self.save_path, file_name)
+            print(f"Opening capture stream #{index} ({start_timestamp.strftime('%H:%M:%S')} -> {end_timestamp.strftime('%H:%M:%S')})")
+
+            videosnap_cmd = [
                 'videosnap', '-w', '0',
                 '-t', str(self.segment_length_s),
                 '-p', video_shape,
-                '-d', 'USB Camera VID:1133 PID:2085',
                 output_path
             ]
-
-            stream = subprocess.Popen(
-                command,
-                stdout=logfile, stderr=logfile
-            )
+            stream = subprocess.Popen(videosnap_cmd, stdout=logfile, stderr=logfile)
 
             time.sleep(self.segment_length_s - 1)
-
             index += 1
 
         logfile.close()

@@ -75,14 +75,15 @@ class AVSyncDetection():
 
         while True:
             if len(segment_file_paths) > 0:
-                if len(segment_file_paths) == 1: time.sleep(3)
-
                 video_path = segment_file_paths[0]
-                processed_files.append(video_path)
+
+                if len(segment_file_paths) == 1: time.sleep(self.retry_wait_time // 2)
+                if not os.access(video_path, os.R_OK): time.sleep(self.retry_wait_time)
 
                 predictions = self.video_detection(video_path)
                 video_id = pathlib.Path(video_path).stem
-                self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
+                self.video_detection_results.update({video_id: predictions})
+                processed_files.append(video_path)
 
                 if output_to_file:
                     with open(output_file, 'a') as file:
@@ -148,7 +149,7 @@ class AVSyncDetection():
             # Run video detection
             predictions = self.video_detection(video_path)
             video_id = pathlib.Path(video_path).stem
-            self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
+            self.video_detection_results.update({video_id: predictions})
 
             # Add local detection results to global results timeline (compensating for segment overlap)
             self.video_segment_index += 1
@@ -182,8 +183,9 @@ class AVSyncDetection():
     def video_detection(self, vid_path):
         print(f"\n--------------------------------------------------------------------------------\n")
 
-        if not os.path.isfile(vid_path):
-            time.sleep(5)
+        # Check file exists & is accessible
+        if not os.path.isfile(vid_path) or not os.access(vid_path, os.R_OK):
+            time.sleep(self.retry_wait_time // 2)
 
         # checking if the provided video has the correct frame rates
         print(f'Using video: {vid_path}')
@@ -270,7 +272,7 @@ class AVSyncDetection():
         plot_width = max(math.ceil(len(np.unique(x_axis_labels)) * 0.7), 13)
         fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
-        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
+        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=400, zorder=10)
 
         plt.xticks(fontsize='small', rotation=90)
         ax.set_xticks(x_axis_vals)
