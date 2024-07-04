@@ -23,13 +23,13 @@ if __name__ == '__main__':
         description='Capture audio and video streams from a camera/microphone and split into segments for processing.'
     )
 
-    parser.add_argument('-m', '--setup-mode', action='store_true', default=False)
-    parser.add_argument('-na', '--no-audio', action='store_false', default=True)
-    parser.add_argument('-nv', '--no-video', action='store_false', default=True)
-    parser.add_argument('-s', '--split-av-tracks', action='store_true', default=False)
-    parser.add_argument('-a', '--audio', type=int, default=0)
-    parser.add_argument('-v', '--video', type=int, default=0)
-    parser.add_argument('-o', '--output-path', type=str, default='output/capture/')
+    parser.add_argument('-m', '--setup-mode', action='store_true', default=False, help="display video to be captured in setup mode with no capture/processing")
+    parser.add_argument('-na', '--no-audio', action='store_false', default=True, help="do not include audio in captured segments")
+    parser.add_argument('-nv', '--no-video', action='store_false', default=True, help="do not include video in captured segments")
+    parser.add_argument('-s', '--split-av-out', action='store_true', default=False, help="output audio and video in separate files (WAV and MP4)")
+    parser.add_argument('-a', '--audio', type=int, default=0, help="index of input audio device")
+    parser.add_argument('-v', '--video', type=int, default=0, help="index of input video device")
+    parser.add_argument('-o', '--output-path', type=str, default='output/capture/', help="directory to output captured video segments to")
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     audio_on = args.no_audio
     video_on = args.no_video
     setup_mode_only = args.setup_mode
-    split_audio_video = args.split_av_tracks or not audio_on or not video_on
+    split_audio_video = args.split_av_out or not audio_on or not video_on
 
     print(f"\nAudio devices available: \n{sounddevice.query_devices()}", end='\n\n')
     print(f" * Processes:")
