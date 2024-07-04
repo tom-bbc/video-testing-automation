@@ -24,13 +24,14 @@ from Synchformer.example import patch_config, decode_single_video_prediction, re
 
 
 class AVSyncDetection():
-    def __init__(self, device='cpu'):
+    def __init__(self, device='cpu', true_offset=None):
         self.video_detection_results = {}
         self.video_segment_index = 0
 
         self.offset_sec = 0.0
         self.v_start_i_sec = 0.0
         self.device = torch.device(device)
+        self.true_offset = float(true_offset)
 
         self.vfps = 25
         self.afps = 16000
@@ -240,6 +241,12 @@ class AVSyncDetection():
         top_predictions = sorted_preds[:min(num_return_preds, len(sorted_preds))]
         return top_predictions
 
+    @staticmethod
+    def narrow_pred_range(preds_by_prob, new_range_bound=1):
+        filter_function = lambda pred_and_prob: (-new_range_bound <= pred_and_prob[0]) and (pred_and_prob[0] <= new_range_bound)
+        preds_by_prob = list(filter(filter_function, preds_by_prob))
+        return preds_by_prob
+
     def plot(self, output_dir='./', time_indexed_files=False):
         # Plot global video detection results over all clips in timeline
         plt.style.use('seaborn-v0_8')
@@ -253,6 +260,8 @@ class AVSyncDetection():
         colour_by_prob = []
 
         for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            prediction = self.narrow_pred_range(prediction)
+
             if time_indexed_files:
                 times = (
                     datetime.strptime(video_id.split('_')[1], '%H:%M:%S.%f'),
@@ -270,16 +279,27 @@ class AVSyncDetection():
                 colour_by_prob.append(prob)
 
         plot_width = max(math.ceil(len(np.unique(x_axis_labels)) * 0.7), 13)
+        offset_step = 0.2
+        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
+
+        if y_limit > 1.8:
+            point_size = 400
+        elif y_limit > 1.4:
+            point_size = 600
+        else:
+            point_size = 800
+
         fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
-        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=400, zorder=10)
+        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
+
+        if self.true_offset is not None:
+            plt.axhline(y=self.true_offset, linestyle='-', c='k', linewidth=4, label='True Offset')
 
         plt.xticks(fontsize='small', rotation=90)
         ax.set_xticks(x_axis_vals)
         ax.set_xticklabels(x_axis_labels)
 
-        offset_step = 0.2
-        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
         ax.set_yticks(np.arange(-y_limit + offset_step, y_limit, offset_step))
         plt.yticks(fontsize='x-large')
 
@@ -309,13 +329,14 @@ if __name__ == '__main__':
     parser.add_argument('directory')
     parser.add_argument('-p', '--plot', action='store_true', default=False)
     parser.add_argument('-s', '--streaming', action='store_true', default=False)
-    parser.add_argument('-t', '--time-indexed-files', action='store_true', default=False)
+    parser.add_argument('-i', '--time-indexed-files', action='store_true', default=False)
     parser.add_argument('-d', '--device', default='cpu')
+    parser.add_argument('-t', '--true-offset', default=None)
 
     args = parser.parse_args()
 
     # Initialise and run AV sync model on input files
-    detector = AVSyncDetection(args.device)
+    detector = AVSyncDetection(args.device, args.true_offset)
 
     if args.streaming:
         detector.continuous_processing(
