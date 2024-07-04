@@ -31,7 +31,11 @@ class AVSyncDetection():
         self.offset_sec = 0.0
         self.v_start_i_sec = 0.0
         self.device = torch.device(device)
-        self.true_offset = float(true_offset)
+
+        if str(true_offset).isnumeric():
+            self.true_offset = float(true_offset)
+        else:
+            self.true_offset = None
 
         self.vfps = 25
         self.afps = 16000
