@@ -1,6 +1,54 @@
-import datetime
+import os
 import cv2
+import time
 import pyaudio
+import datetime
+import subprocess
+
+
+class CombinedCaptureStream():
+    def __init__(self, audio_source=0, video_source=0, checkpoint_path=''):
+
+        # Check device indices with cmd: `ffmpeg -hide_banner -list_devices true -f avfoundation -i ''`
+        self.audio_device = audio_source
+        self.video_device = video_source
+        self.save_path = checkpoint_path
+
+        self.video_width = 1280
+        self.video_height = 720
+        self.segment_length_s = 10
+
+    def launch(self):
+        print("\nCombined audio & video capture stream launched using VideoSnap. \n")
+
+        # Format input sources
+        video_shape = f'{self.video_width}x{self.video_height}'
+        logfile = open(os.path.join(self.save_path, "output-log.txt"), 'a')
+        index = 0
+
+        while True:
+            logfile.write(f"\nCapture stream #{index} \n\n")
+            logfile.flush()
+
+            # Setup stream
+            start_timestamp = datetime.datetime.now()
+            end_timestamp = start_timestamp + datetime.timedelta(seconds=self.segment_length_s)
+            file_name = f"seg{index}_{start_timestamp.strftime('%H:%M:%S.%f')}_{end_timestamp.strftime('%H:%M:%S.%f')}.mp4"
+            output_path = os.path.join(self.save_path, file_name)
+            print(f"Opening capture stream #{index} ({start_timestamp.strftime('%H:%M:%S')} -> {end_timestamp.strftime('%H:%M:%S')})")
+
+            videosnap_cmd = [
+                'videosnap', '-w', '0',
+                '-t', str(self.segment_length_s),
+                '-p', video_shape,
+                output_path
+            ]
+            stream = subprocess.Popen(videosnap_cmd, stdout=logfile, stderr=logfile)
+
+            time.sleep(self.segment_length_s - 1)
+            index += 1
+
+        logfile.close()
 
 
 class AudioStream():
@@ -58,8 +106,6 @@ class VideoStream():
         self.frame_rate = self.video_stream.get(cv2.CAP_PROP_FPS)
         self.stream_open = False
 
-        # self.width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-        # self.height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.width = aspect_ratio_x
         self.height = aspect_ratio_y
 
