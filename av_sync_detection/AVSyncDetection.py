@@ -24,13 +24,16 @@ from Synchformer.example import patch_config, decode_single_video_prediction, re
 
 
 class AVSyncDetection():
-    def __init__(self, device='cpu'):
+    def __init__(self, device='cpu', true_offset=None):
         self.video_detection_results = {}
         self.video_segment_index = 0
 
         self.offset_sec = 0.0
         self.v_start_i_sec = 0.0
         self.device = torch.device(device)
+
+        if true_offset is not None:
+            self.true_offset = float(true_offset)
 
         self.vfps = 25
         self.afps = 16000
@@ -75,14 +78,15 @@ class AVSyncDetection():
 
         while True:
             if len(segment_file_paths) > 0:
-                if len(segment_file_paths) == 1: time.sleep(3)
-
                 video_path = segment_file_paths[0]
-                processed_files.append(video_path)
+
+                if len(segment_file_paths) == 1: time.sleep(self.retry_wait_time // 2)
+                if not os.access(video_path, os.R_OK): time.sleep(self.retry_wait_time)
 
                 predictions = self.video_detection(video_path)
                 video_id = pathlib.Path(video_path).stem
-                self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
+                self.video_detection_results.update({video_id: predictions})
+                processed_files.append(video_path)
 
                 if output_to_file:
                     with open(output_file, 'a') as file:
@@ -148,7 +152,7 @@ class AVSyncDetection():
             # Run video detection
             predictions = self.video_detection(video_path)
             video_id = pathlib.Path(video_path).stem
-            self.video_detection_results.update({video_id: self.get_top_preds(predictions)})
+            self.video_detection_results.update({video_id: predictions})
 
             # Add local detection results to global results timeline (compensating for segment overlap)
             self.video_segment_index += 1
@@ -182,8 +186,9 @@ class AVSyncDetection():
     def video_detection(self, vid_path):
         print(f"\n--------------------------------------------------------------------------------\n")
 
-        if not os.path.isfile(vid_path):
-            time.sleep(5)
+        # Check file exists & is accessible
+        if not os.path.isfile(vid_path) or not os.access(vid_path, os.R_OK):
+            time.sleep(self.retry_wait_time // 2)
 
         # checking if the provided video has the correct frame rates
         print(f'Using video: {vid_path}')
@@ -238,6 +243,12 @@ class AVSyncDetection():
         top_predictions = sorted_preds[:min(num_return_preds, len(sorted_preds))]
         return top_predictions
 
+    @staticmethod
+    def narrow_pred_range(preds_by_prob, new_range_bound=1):
+        filter_function = lambda pred_and_prob: (-new_range_bound <= pred_and_prob[0]) and (pred_and_prob[0] <= new_range_bound)
+        preds_by_prob = list(filter(filter_function, preds_by_prob))
+        return preds_by_prob
+
     def plot(self, output_dir='./', time_indexed_files=False):
         # Plot global video detection results over all clips in timeline
         plt.style.use('seaborn-v0_8')
@@ -251,6 +262,8 @@ class AVSyncDetection():
         colour_by_prob = []
 
         for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            prediction = self.narrow_pred_range(prediction)
+
             if time_indexed_files:
                 times = (
                     datetime.strptime(video_id.split('_')[1], '%H:%M:%S.%f'),
@@ -268,29 +281,52 @@ class AVSyncDetection():
                 colour_by_prob.append(prob)
 
         plot_width = max(math.ceil(len(np.unique(x_axis_labels)) * 0.7), 13)
+        offset_step = 0.2
+        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
+
+        if y_limit > 1.8:
+            point_size = 400
+        elif y_limit > 1.4:
+            point_size = 600
+        else:
+            point_size = 800
+
         fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
-        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=500, zorder=10)
+        predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
+
+        for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            max_likelihood_idx = np.argmax([prob for pred, prob in prediction])
+            max_likelihood_prediction = prediction[max_likelihood_idx][0]
+            ax.scatter(float(video_index), float(max_likelihood_prediction), s=point_size, facecolors='none', edgecolors='k', linewidth=5)
+
+        if self.true_offset is not None:
+            plt.axhline(y=self.true_offset, linestyle='-', c='k', linewidth=4, label='True Offset')
 
         plt.xticks(fontsize='small', rotation=90)
         ax.set_xticks(x_axis_vals)
         ax.set_xticklabels(x_axis_labels)
 
-        offset_step = 0.2
-        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
         ax.set_yticks(np.arange(-y_limit + offset_step, y_limit, offset_step))
         plt.yticks(fontsize='x-large')
 
         ax.set_xlabel("Video segment", fontsize='xx-large')
         ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
-        ax.set_title(f"Predictions of AV sync model\n", fontsize=20)
-        ax.grid(which='major', linewidth=1, zorder=0)
+        if self.true_offset is None:
+            ax.set_title(f"Predicted AV Offset per Video Segment\n", fontsize=20)
+        elif self.true_offset == 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment (in sync test clip)\n", fontsize=20)
+        elif self.true_offset < 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment ({self.true_offset}s offset test clip)\n", fontsize=20)
+        elif self.true_offset > 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment (+{self.true_offset}s offset test clip)\n", fontsize=20)
 
         cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03)
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 
+        ax.grid(which='major', linewidth=1, zorder=0)
         plt.tight_layout()
         plt.savefig(os.path.join(output_dir, 'av_sync_plot.png'))
         print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
@@ -305,15 +341,16 @@ if __name__ == '__main__':
     )
 
     parser.add_argument('directory')
-    parser.add_argument('-p', '--plot', action='store_true', default=False)
-    parser.add_argument('-s', '--streaming', action='store_true', default=False)
-    parser.add_argument('-t', '--time-indexed-files', action='store_true', default=False)
-    parser.add_argument('-d', '--device', default='cpu')
+    parser.add_argument('-p', '--plot', action='store_true', default=False, help="plot sync predictions as generated by model")
+    parser.add_argument('-s', '--streaming', action='store_true', default=False, help="real-time detection of streamed input by continuously locating & processing video segments")
+    parser.add_argument('-i', '--time-indexed-files', action='store_true', default=False, help="label output predictions with available timestamps of input video segments")
+    parser.add_argument('-d', '--device', default='cpu', help="harware device to run model on")
+    parser.add_argument('-t', '--true-offset', default=None, help="known true av offset of the input video")
 
     args = parser.parse_args()
 
     # Initialise and run AV sync model on input files
-    detector = AVSyncDetection(args.device)
+    detector = AVSyncDetection(args.device, args.true_offset)
 
     if args.streaming:
         detector.continuous_processing(
