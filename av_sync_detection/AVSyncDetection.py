@@ -1,6 +1,5 @@
 import os
 import sys
-import math
 import time
 import glob
 import torch
@@ -34,6 +33,8 @@ class AVSyncDetection():
 
         if true_offset is not None:
             self.true_offset = float(true_offset)
+        else:
+            self.true_offset = None
 
         self.vfps = 25
         self.afps = 16000
@@ -56,6 +57,8 @@ class AVSyncDetection():
 
         self.system_timeout = 30
         self.retry_wait_time = 10
+
+        self.likelihood_threshold = 0.1
 
     def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
         # Setup
@@ -236,9 +239,8 @@ class AVSyncDetection():
             [round(float(prob), 4) for prob in likelihoods]
         ))
 
-    @staticmethod
-    def get_top_preds(preds_by_prob, threshold=0.001, num_return_preds=10):
-        preds_by_prob = filter(lambda pred_and_prob: pred_and_prob[-1] > threshold, preds_by_prob)
+    def get_top_preds(self, preds_by_prob, num_return_preds=10):
+        preds_by_prob = filter(lambda pred_and_prob: pred_and_prob[-1] > self.likelihood_threshold, preds_by_prob)
         sorted_preds = list(sorted(preds_by_prob, key=lambda pred_and_prob: pred_and_prob[-1], reverse=True))
         top_predictions = sorted_preds[:min(num_return_preds, len(sorted_preds))]
         return top_predictions
@@ -280,7 +282,9 @@ class AVSyncDetection():
                 y_axis.append(pred)
                 colour_by_prob.append(prob)
 
-        plot_width = max(math.ceil(len(np.unique(x_axis_labels)) * 0.7), 13)
+        # plot_width = max(round(len(np.unique(x_axis_labels) * 0.5), 13)
+        plot_width = 12 + len(np.unique(x_axis_labels)) // 2
+
         offset_step = 0.2
         y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
 
@@ -296,21 +300,31 @@ class AVSyncDetection():
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
 
         for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            video_index = float(video_index)
+            prediction = self.narrow_pred_range(prediction)
+
             max_likelihood_idx = np.argmax([prob for pred, prob in prediction])
-            max_likelihood_prediction = prediction[max_likelihood_idx][0]
-            ax.scatter(float(video_index), float(max_likelihood_prediction), s=point_size, facecolors='none', edgecolors='k', linewidth=5)
+            max_likelihood_prediction, max_likelihood = prediction[max_likelihood_idx]
+            max_likelihood_prediction = float(max_likelihood_prediction)
+
+            if max_likelihood > self.likelihood_threshold:
+                if video_index == len(self.video_detection_results) - 1:
+                    ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=4, label="Max prediction")
+                else:
+                    ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=4)
 
         if self.true_offset is not None:
-            plt.axhline(y=self.true_offset, linestyle='-', c='k', linewidth=4, label='True Offset')
+            plt.axhline(y=self.true_offset, linestyle='-', c='k', linewidth=4, label='True offset')
 
-        plt.xticks(fontsize='small', rotation=90)
+        plt.xticks(fontsize='large', rotation=90)
         ax.set_xticks(x_axis_vals)
         ax.set_xticklabels(x_axis_labels)
+        ax.xaxis.set_label_coords(0.5, -0.2)
 
         ax.set_yticks(np.arange(-y_limit + offset_step, y_limit, offset_step))
         plt.yticks(fontsize='x-large')
 
-        ax.set_xlabel("Video segment", fontsize='xx-large')
+        ax.set_xlabel("Video Segment Index", fontsize='xx-large')
         ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
         if self.true_offset is None:
@@ -322,15 +336,17 @@ class AVSyncDetection():
         elif self.true_offset > 0:
             ax.set_title(f"Predicted AV Offset per Video Segment (+{self.true_offset}s offset test clip)\n", fontsize=20)
 
-        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03)
+        cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03, pad=0.01)
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 
+        plt.legend(loc=0, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='large').set_zorder(12)
         ax.grid(which='major', linewidth=1, zorder=0)
         plt.tight_layout()
+
         plt.savefig(os.path.join(output_dir, 'av_sync_plot.png'))
-        print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
         plt.close()
+        print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
 
 
 if __name__ == '__main__':
