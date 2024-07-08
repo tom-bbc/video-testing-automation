@@ -313,13 +313,20 @@ class AVSyncDetection():
         ax.set_xlabel("Video segment", fontsize='xx-large')
         ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
-        ax.set_title(f"Predicted AV Offset per Video Segment\n", fontsize=20)
-        ax.grid(which='major', linewidth=1, zorder=0)
+        if self.true_offset is None:
+            ax.set_title(f"Predicted AV Offset per Video Segment\n", fontsize=20)
+        elif self.true_offset == 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment (in sync test clip)\n", fontsize=20)
+        elif self.true_offset < 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment ({self.true_offset}s offset test clip)\n", fontsize=20)
+        elif self.true_offset > 0:
+            ax.set_title(f"Predicted AV Offset per Video Segment (+{self.true_offset}s offset test clip)\n", fontsize=20)
 
         cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03)
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 
+        ax.grid(which='major', linewidth=1, zorder=0)
         plt.tight_layout()
         plt.savefig(os.path.join(output_dir, 'av_sync_plot.png'))
         print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
