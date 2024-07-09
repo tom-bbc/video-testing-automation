@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import glob
+import json
 import torch
 import pathlib
 import argparse
@@ -40,8 +41,6 @@ class AVSyncDetection():
         self.afps = 16000
         self.in_size = 256
 
-        self.output_file = "av_sync_predictions.txt"
-
         # if the model does not exist try to download it from the server
         exp_name = '24-01-04T16-39-21'
         cfg_path = f'Synchformer/logs/sync_models/{exp_name}/cfg-{exp_name}.yaml'
@@ -61,12 +60,6 @@ class AVSyncDetection():
         self.likelihood_threshold = 0.1
 
     def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
-        # Setup
-        if output_to_file:
-            output_file = os.path.join(directory_path, self.output_file)
-            with open(output_file, 'a') as file:
-                file.write("\n--------------------------------------------------------------------------------\n")
-
         # Only allow continuous processing on directories
         if not os.path.isdir(directory_path):
             exit(1)
@@ -90,13 +83,6 @@ class AVSyncDetection():
                 video_id = pathlib.Path(video_path).stem
                 self.video_detection_results.update({video_id: predictions})
                 processed_files.append(video_path)
-
-                if output_to_file:
-                    with open(output_file, 'a') as file:
-                        file.writelines([
-                            f"\nInput video: {video_id}",
-                            f"\nPredictions: {self.get_top_preds(predictions)}\n"
-                        ])
 
             if len(segment_file_paths) > 1:
                 segment_file_paths = segment_file_paths[1:]
@@ -127,13 +113,10 @@ class AVSyncDetection():
             if plot:
                 self.plot(directory_path, time_indexed_files)
 
+        if output_to_file: self.write_results_file(directory_path)
+
     def process(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
         # Setup
-        if output_to_file:
-            output_file = os.path.join(directory_path, self.output_file)
-            with open(output_file, 'a') as file:
-                file.write("\n--------------------------------------------------------------------------------\n")
-
         if os.path.isfile(directory_path):
             # Permits running on single input file
             if directory_path.endswith(".mp4"):
@@ -160,15 +143,10 @@ class AVSyncDetection():
             # Add local detection results to global results timeline (compensating for segment overlap)
             self.video_segment_index += 1
 
-            if output_to_file:
-                with open(output_file, 'a') as file:
-                    file.writelines([
-                        f"\nInput video: {video_id}",
-                        f"\nPredictions: {self.get_top_preds(predictions)}\n"
-                    ])
-
             if plot:
                 self.plot(directory_path, time_indexed_files)
+
+        if output_to_file: self.write_results_file(directory_path)
 
     def get_local_paths(self, dir, time_indexed_files=False):
         video_filenames = glob.glob(f"{dir}*.mp4")
@@ -250,6 +228,19 @@ class AVSyncDetection():
         filter_function = lambda pred_and_prob: (-new_range_bound <= pred_and_prob[0]) and (pred_and_prob[0] <= new_range_bound)
         preds_by_prob = list(filter(filter_function, preds_by_prob))
         return preds_by_prob
+
+    def write_results_file(self, path):
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        elif not os.path.isdir(path):
+            return False
+
+        output_path = os.path.join(path, "av_sync_predictions.json")
+
+        with open(output_path, 'w') as file:
+            json.dump(self.video_detection_results, file)
+
+        return True
 
     def plot(self, output_dir='./', time_indexed_files=False):
         # Plot global video detection results over all clips in timeline
@@ -344,9 +335,10 @@ class AVSyncDetection():
         ax.grid(which='major', linewidth=1, zorder=0)
         plt.tight_layout()
 
-        plt.savefig(os.path.join(output_dir, 'av_sync_plot.png'))
+        output_path = os.path.join(output_dir, "av_sync_plot.png")
+        print(f"\nPredictions plot generated: {output_path}")
+        plt.savefig(output_path)
         plt.close()
-        print(f"\nPredictions plot generated: {os.path.join(output_dir, 'av_sync_plot.png')}")
 
 
 if __name__ == '__main__':
