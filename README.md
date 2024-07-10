@@ -165,13 +165,15 @@ wget https://github.com/VQAssessment/DOVER/releases/download/v0.1.0/DOVER.pth -P
 
 ## Running
 
-* Run inference on directory at **PATH**: `python StutterDetection.py PATH`
-* This will timestamps of the any stuttering found in the audio or video files.
+* Run inference on directory or video/audio file at **PATH**: `python StutterDetection.py PATH`
+* This will output a plot of the "motion fluency" over the course of the video (low fluency may indicate stuttering events) and/or a plot of audio stutter times detected in the waveform.
 
 ### General CLI
 
 ```
-usage: StutterDetection.py [-h] [-f FRAMES] [-e EPOCHS] [-c] [-na] [-nv] [-t] directory
+usage: StutterDetection.py [-h] [-na] [-nv] [-c] [-t] [-i] [-f FRAMES] [-e EPOCHS]
+                           [-d DEVICE]
+                           directory
 
 Run audio and video stutter detection algorithms over local AV segments.
 
@@ -180,10 +182,19 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -na, --no-audio
-  -nv, --no-video
-  -c, --clean-video
+  -na, --no-audio       Do not perform stutter detection on the audio track
+  -nv, --no-video       Do not perform stutter detection on the video track
+  -c, --clean-video     Testing on clean stutter-free videos (for experimentation)
   -t, --true-timestamps
+                        Plot known stutter times on the output graph, specified in
+                        'true-stutter-timestamps.json
+  -i, --time-indexed-files
+                        Label batch of detections over video segments with their
+                        time range (from filename)
   -f FRAMES, --frames FRAMES
+                        Number of frames to downsample video to
   -e EPOCHS, --epochs EPOCHS
+                        Number of times to repeat inference per video
+  -d DEVICE, --device DEVICE
+                        Specify processing hardware
 ```
