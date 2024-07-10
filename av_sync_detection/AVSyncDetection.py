@@ -57,63 +57,7 @@ class AVSyncDetection():
         self.system_timeout = 30
         self.retry_wait_time = 10
 
-        self.likelihood_threshold = 0.1
-
-    def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
-        # Only allow continuous processing on directories
-        if not os.path.isdir(directory_path):
-            exit(1)
-
-        # Load the Syncformer model from checkpoint
-        self.load_model()
-
-        # Gets list of AV files from local directory
-        segment_file_paths = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
-        processed_files = []
-        print(f"New files found: {segment_file_paths}")
-
-        while True:
-            if len(segment_file_paths) > 0:
-                video_path = segment_file_paths[0]
-
-                if len(segment_file_paths) == 1: time.sleep(self.retry_wait_time // 2)
-                if not os.access(video_path, os.R_OK): time.sleep(self.retry_wait_time)
-
-                predictions = self.video_detection(video_path)
-                video_id = pathlib.Path(video_path).stem
-                self.video_detection_results.update({video_id: predictions})
-                processed_files.append(video_path)
-
-            if len(segment_file_paths) > 1:
-                segment_file_paths = segment_file_paths[1:]
-            else:
-                print("\nChecking for new files.")
-                new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
-                segment_file_paths = [f for f in new_files if f not in processed_files]
-
-                if len(segment_file_paths) == 0:
-                    retry_attempt = 0
-                    while len(segment_file_paths) == 0:
-                        if retry_attempt >= self.system_timeout // self.retry_wait_time:
-                            break
-
-                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.system_timeout // self.retry_wait_time}")
-                        retry_attempt += 1
-                        time.sleep(self.retry_wait_time)
-
-                        new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
-                        segment_file_paths = [f for f in new_files if f not in processed_files]
-
-                    if len(segment_file_paths) == 0:
-                        print("Shutting down processing.")
-                        break
-
-                print(f"New files found: {segment_file_paths}")
-
-            if plot:
-                self.plot(directory_path, time_indexed_files)
-
-        if output_to_file: self.write_results_file(directory_path)
+        self.likelihood_threshold = 0.40
 
     def process(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
         # Setup
@@ -143,8 +87,62 @@ class AVSyncDetection():
             # Add local detection results to global results timeline (compensating for segment overlap)
             self.video_segment_index += 1
 
-            if plot:
-                self.plot(directory_path, time_indexed_files)
+            if plot: self.plot(directory_path, time_indexed_files)
+
+        if output_to_file: self.write_results_file(directory_path)
+
+    def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
+        # Only allow continuous processing on directories
+        if not os.path.isdir(directory_path):
+            exit(1)
+
+        # Load the Syncformer model from checkpoint
+        self.load_model()
+
+        # Gets list of AV files from local directory
+        segment_file_paths = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+        processed_files = []
+        print(f"New files found: {segment_file_paths}")
+
+        while True:
+            if len(segment_file_paths) > 0:
+                video_path = segment_file_paths[0]
+
+                if len(segment_file_paths) == 1: time.sleep(self.retry_wait_time // 2)
+                if not os.access(video_path, os.R_OK): time.sleep(self.retry_wait_time)
+
+                predictions = self.video_detection(video_path)
+                video_id = pathlib.Path(video_path).stem
+                self.video_detection_results.update({video_id: predictions})
+                processed_files.append(video_path)
+
+                if plot: self.plot(directory_path, time_indexed_files)
+
+            if len(segment_file_paths) > 1:
+                segment_file_paths = segment_file_paths[1:]
+            else:
+                print("\nChecking for new files.")
+                new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                segment_file_paths = [f for f in new_files if f not in processed_files]
+
+                if len(segment_file_paths) == 0:
+                    retry_attempt = 0
+                    while len(segment_file_paths) == 0:
+                        if retry_attempt >= self.system_timeout // self.retry_wait_time:
+                            break
+
+                        print(f"No new files located. Retry attempt: {retry_attempt + 1} / {self.system_timeout // self.retry_wait_time}")
+                        retry_attempt += 1
+                        time.sleep(self.retry_wait_time)
+
+                        new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                        segment_file_paths = [f for f in new_files if f not in processed_files]
+
+                    if len(segment_file_paths) == 0:
+                        print("Shutting down processing.")
+                        break
+
+                print(f"New files found: {segment_file_paths}")
 
         if output_to_file: self.write_results_file(directory_path)
 
@@ -170,6 +168,7 @@ class AVSyncDetection():
         # Check file exists & is accessible
         if not os.path.isfile(vid_path) or not os.access(vid_path, os.R_OK):
             time.sleep(self.retry_wait_time // 2)
+            if not os.path.isfile(vid_path): return []
 
         # checking if the provided video has the correct frame rates
         print(f'Using video: {vid_path}')
