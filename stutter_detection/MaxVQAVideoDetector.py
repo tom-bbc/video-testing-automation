@@ -53,7 +53,10 @@ def encode_text_prompts(prompts, tokenizer, model, device='cpu'):
 def setup_models(text_prompts, opt, aesthetic_clip_len, technical_num_clips, device='cpu', use_aesthetic_features=False):
     # Initialize fast-vqa encoder
     fast_vqa_encoder = DOVER(**opt["model"]["args"]).to(device)
-    fast_vqa_encoder.load_state_dict(torch.load("ExplainableVQA/DOVER/pretrained_weights/DOVER.pth", map_location=device), strict=False)
+    fast_vqa_encoder.load_state_dict(
+        torch.load("ExplainableVQA/DOVER/pretrained_weights/DOVER.pth", map_location=device),
+        strict=False
+    )
 
     # Initialize CLIP model
     clip_model, _, _ = open_clip.create_model_and_transforms("RN50", pretrained="openai")
