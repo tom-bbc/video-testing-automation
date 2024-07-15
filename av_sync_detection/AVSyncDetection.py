@@ -241,19 +241,27 @@ class AVSyncDetection():
 
         return True
 
-    def plot(self, output_dir='./', time_indexed_files=False):
+    def plot(self, output_dir='./', time_indexed_files=False, plot_mean_pred=True):
         # Plot global video detection results over all clips in timeline
         plt.style.use('seaborn-v0_8')
 
         if len(self.video_detection_results) == 0:
             return
 
+        plot_width = 12 + len(self.video_detection_results.keys()) // 2
+        point_size = 800
+
         x_axis_vals = []
         x_axis_labels = []
         y_axis = []
         colour_by_prob = []
+        weighted_prediction_total = 0
+        weights_total = 0
+
+        fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
 
         for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
+            # Collate video (x), prediction (y), and likelihood (c) for plotting
             prediction = self.narrow_pred_range(prediction)
 
             if time_indexed_files:
@@ -266,52 +274,55 @@ class AVSyncDetection():
             else:
                 x_value = video_id
 
+            probs = []
             for pred, prob in prediction:
                 x_axis_vals.append(video_index)
                 x_axis_labels.append(x_value)
                 y_axis.append(pred)
-                colour_by_prob.append(prob)
+                probs.append(prob)
 
-        # plot_width = max(round(len(np.unique(x_axis_labels) * 0.5), 13)
-        plot_width = 12 + len(np.unique(x_axis_labels)) // 2
+            colour_by_prob.extend(probs)
 
-        offset_step = 0.2
-        y_limit = round(round(np.max(np.absolute(y_axis)) / offset_step) * offset_step + offset_step, 1)
+            # Plot ring around maximal prediction
+            if len(probs) > 0:
+                max_likelihood_idx = np.argmax(probs)
+                max_likelihood_prediction, max_likelihood = prediction[max_likelihood_idx]
+                max_likelihood_prediction = float(max_likelihood_prediction)
+                video_index = float(video_index)
 
-        if y_limit > 1.8:
-            point_size = 400
-        elif y_limit > 1.4:
-            point_size = 600
-        else:
-            point_size = 800
+                if max_likelihood > self.likelihood_threshold:
+                    weighted_prediction_total += max_likelihood * max_likelihood_prediction
+                    weights_total += max_likelihood
 
-        fig, ax = plt.subplots(1, 1, figsize=(plot_width, 9))
+                    if video_index == len(self.video_detection_results) - 1:
+                        ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=2, zorder=11, label='Max prediction')
+                    else:
+                        ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=2, zorder=11)
+
+        # Plot all predictions by likelihood
         colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
 
-        for video_index, (video_id, prediction) in enumerate(self.video_detection_results.items()):
-            video_index = float(video_index)
-            prediction = self.narrow_pred_range(prediction)
+        # Average offset prediction marker
+        weighted_average_prediction = weighted_prediction_total / weights_total
+        if plot_mean_pred:
+            plt.axhline(y=weighted_average_prediction, linestyle='-', c='steelblue', linewidth=4, label=f'Mean prediction ({weighted_average_prediction:.2f})')
 
-            max_likelihood_idx = np.argmax([prob for pred, prob in prediction])
-            max_likelihood_prediction, max_likelihood = prediction[max_likelihood_idx]
-            max_likelihood_prediction = float(max_likelihood_prediction)
-
-            if max_likelihood > self.likelihood_threshold:
-                if video_index == len(self.video_detection_results) - 1:
-                    ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=4, label="Max prediction")
-                else:
-                    ax.scatter(video_index, max_likelihood_prediction, s=point_size, facecolors='none', edgecolors='k', linewidth=4)
-
+        # True offset value marker
         if self.true_offset is not None:
-            plt.axhline(y=self.true_offset, linestyle='-', c='k', linewidth=4, label='True offset')
+            if plot_mean_pred and round(weighted_average_prediction, 2) == round(self.true_offset, 2):
+                plt.axhline(y=self.true_offset, linestyle='--', c='darkred', linewidth=4, label=f'True offset ({self.true_offset:.2f})')
+            else:
+                plt.axhline(y=self.true_offset, linestyle='-', c='darkred', linewidth=4, label=f'True offset ({self.true_offset:.2f})')
+
 
         plt.xticks(fontsize='large', rotation=90)
         ax.set_xticks(x_axis_vals)
         ax.set_xticklabels(x_axis_labels)
         ax.xaxis.set_label_coords(0.5, -0.2)
 
-        ax.set_yticks(np.arange(-y_limit + offset_step, y_limit, offset_step))
+        y_limit = round(round(np.max(np.absolute(y_axis)) / 0.2) * 0.2 + 0.2, 1)
+        ax.set_yticks(np.arange(-y_limit + 0.2, y_limit, 0.2))
         plt.yticks(fontsize='x-large')
 
         ax.set_xlabel("Video Segment Index", fontsize='xx-large')
@@ -330,7 +341,7 @@ class AVSyncDetection():
         cbar.set_label(label='Likelihood', fontsize='xx-large')
         cbar.ax.tick_params(labelsize='x-large')
 
-        plt.legend(loc=0, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='large').set_zorder(12)
+        plt.legend(loc=2, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', fontsize='large').set_zorder(12)
         ax.grid(which='major', linewidth=1, zorder=0)
         plt.tight_layout()
 
