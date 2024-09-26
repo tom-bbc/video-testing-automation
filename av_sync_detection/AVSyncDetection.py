@@ -304,8 +304,11 @@ class AVSyncDetection():
         predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
 
         # Average offset prediction marker
-        weighted_average_prediction = weighted_prediction_total / weights_total
+        if weighted_prediction_total == 0 or weights_total == 0:
+            plot_mean_pred = False
+
         if plot_mean_pred:
+            weighted_average_prediction = weighted_prediction_total / weights_total
             plt.axhline(y=weighted_average_prediction, linestyle='-', c='steelblue', linewidth=4, label=f'Mean prediction ({weighted_average_prediction:.2f})')
 
         # True offset value marker

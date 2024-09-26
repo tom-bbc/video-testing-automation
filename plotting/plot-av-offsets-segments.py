@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -10,10 +11,13 @@ plt.style.use('seaborn-v0_8')
 
 true_offset = 0.0
 plot_mean_pred = True
+plot_mode_pred = True
 time_indexed_files = True
-likelihood_threshold = 0.40
-input_file = "../output/av-predictions/Graham-Norton.json"
+likelihood_threshold = 0.6
 filter_prediction_range = lambda pred_and_prob: (-1 <= pred_and_prob[0]) and (pred_and_prob[0] <= 1)
+
+# input_file = "../output/av-predictions/Graham-Norton.json"
+input_file = sys.argv[1]
 
 # Plot global video detection results over all clips in timeline
 with open(input_file, 'r') as fp:
@@ -26,6 +30,7 @@ x_axis_vals = []
 x_axis_labels = []
 y_axis = []
 colour_by_prob = []
+confident_predictions = []
 weighted_prediction_total = 0
 weights_total = 0
 
@@ -62,6 +67,8 @@ for video_index, (video_id, prediction) in enumerate(video_detection_results.ite
         video_index = float(video_index)
 
         if max_likelihood > likelihood_threshold:
+            confident_predictions.append(max_likelihood_prediction)
+
             weighted_prediction_total += max_likelihood * max_likelihood_prediction
             weights_total += max_likelihood
 
@@ -74,17 +81,25 @@ for video_index, (video_id, prediction) in enumerate(video_detection_results.ite
 colour_map = cmr.get_sub_cmap('Greens', start=np.min(colour_by_prob), stop=np.max(colour_by_prob))
 predictions_plot = ax.scatter(x_axis_vals, y_axis, c=colour_by_prob, cmap=colour_map, s=point_size, zorder=10)
 
-# Average offset prediction marker
-weighted_average_prediction = weighted_prediction_total / weights_total
-if plot_mean_pred:
-    plt.axhline(y=weighted_average_prediction, linestyle='-', c='steelblue', linewidth=4, label=f'Mean prediction ({weighted_average_prediction:.2f})')
+# Most common and mean offset prediction markers
+mode_prediction = max(confident_predictions, key=confident_predictions.count)
+weighted_mean_prediction = weighted_prediction_total / weights_total
+
+if plot_mode_pred and plot_mean_pred and round(mode_prediction, 2) == round(weighted_mean_prediction, 2):
+    plt.axhline(y=mode_prediction, linestyle='-', c='darkred', linewidth=4, label=f'Mean & mode prediction ({mode_prediction:.2f})')
+else:
+    if plot_mode_pred:
+        plt.axhline(y=mode_prediction, linestyle='-', c='darkred', linewidth=4, label=f'Mode prediction ({mode_prediction:.2f})')
+
+    if plot_mean_pred:
+        plt.axhline(y=weighted_mean_prediction, linestyle='-', c='orange', linewidth=4, label=f'Mean prediction ({weighted_mean_prediction:.2f})')
 
 # True offset value marker
 if true_offset is not None:
-    if plot_mean_pred and round(weighted_average_prediction, 2) == round(true_offset, 2):
-        plt.axhline(y=true_offset, linestyle='--', c='darkred', linewidth=4, label=f'True offset ({true_offset:.2f})')
+    if plot_mean_pred and (round(weighted_mean_prediction, 2) == round(true_offset, 2) or round(mode_prediction, 2) == round(true_offset, 2)):
+        plt.axhline(y=true_offset, linestyle='--', c='steelblue', linewidth=4, label=f'True offset ({true_offset:.2f})')
     else:
-        plt.axhline(y=true_offset, linestyle='-', c='darkred', linewidth=4, label=f'True offset ({true_offset:.2f})')
+        plt.axhline(y=true_offset, linestyle='-', c='steelblue', linewidth=4, label=f'True offset ({true_offset:.2f})')
 
 plt.xticks(fontsize='large', rotation=90)
 ax.set_xticks(x_axis_vals)
@@ -115,8 +130,11 @@ plt.legend(loc=2, frameon=True, markerscale=0.5, borderpad=0.7, facecolor='w', f
 ax.grid(which='major', linewidth=1, zorder=0)
 plt.tight_layout()
 
-
 output_path = os.path.splitext(input_file)[0] + "-plot.png"
-print(f"\nPredictions plot generated: {output_path}")
+print(f" * Predictions plot generated: {output_path}")
 plt.savefig(output_path)
 plt.close()
+
+no_correct_preds = len([p for p in confident_predictions if p == true_offset])
+print(f" * Accuracy on confident predictions: {no_correct_preds} / {len(confident_predictions)}")
+print(f" * Accuracy on all segments: {no_correct_preds} / {len(np.unique(x_axis_labels))}")
