@@ -27,15 +27,6 @@ class VideoDetector():
         self.model_dir = "uvq/models"
         self.feature_dir = "features"
         self.output_dir = ''
-        self.true_timesteps = {
-            "rugby-stutter-timestamps": [
-                ["14:24:07", "14:24:10"],
-                ["14:24:15", "14:24:18"],
-                ["14:24:20", "14:24:21"],
-                ["14:24:37", "14:24:39"],
-                ["14:24:42", "14:24:44"]
-            ]
-        }
 
     def process(self, video_path, plot=True):
         # Get video length
@@ -87,10 +78,6 @@ class VideoDetector():
         axes = axes.reshape(-1)
 
         for metric in range(26):
-            # if video_name in self.true_timesteps.keys():
-            #     for start, end in self.true_timesteps[video_name]:
-            #         axes[metric].axvspan(start, end, alpha=0.2, color='grey')
-
             for block in range(4):
                 axes[metric].set_title(DISTORTION_TYPES[metric])
                 axes[metric].grid(linewidth=0.2)

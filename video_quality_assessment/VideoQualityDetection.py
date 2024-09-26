@@ -1,14 +1,12 @@
 import os
 import glob
+import argparse
 import numpy as np
-
-from capture.AudioVisualProcessor import AudioVisualProcessor
 from GoogleUVQDetector import VideoDetector
 
 
-class VideoQualityDetection(AudioVisualProcessor):
-    def __init__(self, *args, **kwargs):
-        super(VideoQualityDetection, self).__init__(*args, **kwargs)
+class VideoQualityDetection():
+    def __init__(self):
         self.video_detector = VideoDetector()
         self.video_detection_results = np.array([[]]*16)
 
@@ -20,6 +18,7 @@ class VideoQualityDetection(AudioVisualProcessor):
             # Gets list of AV files from local directory
             video_segment_paths = self.get_local_paths(directory_path)
         else:
+            print(f"No input video found at path: {directory_path}")
             exit(1)
 
         # Cycle through each AV file running detection algorithms
@@ -38,7 +37,15 @@ class VideoQualityDetection(AudioVisualProcessor):
 
 
 if __name__ == "__main__":
-    video = './data/doctor-who/stutter/'
+    # Recieve input parameters from CLI
+    parser = argparse.ArgumentParser(
+        prog='VideoQualityDetection.py',
+        description='Run video video quality assessment using Google UVQ over local videos.'
+    )
+
+    parser.add_argument("path")
+    args = parser.parse_args()
+    video = args.path
 
     detector = VideoQualityDetection()
     detector.process(video)

@@ -1,19 +1,29 @@
 # General Setup
 
-* Firstly install external submodules: `git submodule update --init --recursive`
-* Install requirements using pip: `pip install -r requirements.txt`
-* Audio and video capture module is located within directory **capture**
-* AV synchronisation detection module is located within directory **av_sync_detection**
-* Stutter detection module is located within directory **stutter_detection**
+* Requirements:
+  * Clone external submodules: `git submodule update --init --recursive`
+  * Set Python version to **3.10**: `pyenv global 3.10`
+  * Install Python requirements using pip:
+    * `python -m venv venv`
+    * `source venv/bin/activate`
+    * `pip install -r requirements.txt`
+  * If on Mac, [download and install](https://github.com/matthutchinson/videosnap/releases) shell requirement **VideoSnap** (a macOS command line tool for recording video and audio from any attached capture device):
+    * `wget https://github.com/matthutchinson/videosnap/releases/download/v0.0.9/videosnap-0.0.9.pkg`
+    * `sudo installer -pkg videosnap-0.0.9.pkg -target /`
+* Contents:
+  * Audio and video capture module is located within directory **capture**
+  * AV synchronisation detection using *Synchformer* is located within directory **av_sync_detection**
+  * Stutter detection using *MaxVQA* and *Essentia* is located within directory **stutter_detection**
+  * Video quality assessment using *Google UVQ* is located within directory **video_quality_assessment**
 
 <br>
 
 # AV Capture System
 
 * Setup mode to check input audio/video sources: `python capture/capture.py --setup-mode`
-* Run capture pipeline to generate AV files: `python capture/capture.py -a AUDIO_SOURCE -v VIDEO_SOURCE --save-files`
+* Run capture pipeline to generate AV files: `python capture/capture.py -a AUDIO_SOURCE -v VIDEO_SOURCE`
 * This capture audio and video in 10s segments and save them to the local directory **output/capture/**
-* Halt capture by interrupting execution
+* Halt capture by interrupting execution with `CTRL+C`
 
 #### General CLI
 
@@ -46,7 +56,9 @@ options:
 * Detection can be completed over a video file or directory of files.
 * Can also enable **streaming** mode that continuously checks a directory for files and processes as they are added. This can be used in conjunction with the capture system to perform AV sync detection in real-time.
 * Run inference on static files at **PATH**: `python AVSyncDetection.py PATH --plot`
-* Run in streaming mode on captured video segments: `python AVSyncDetection.py ../output/capture/segments/ -stp`
+* Run in streaming mode on captured video segments: `python AVSyncDetection.py ../output/capture/segments/ -sip`
+* If running on an Apple Silicon Mac: `python AVSyncDetection.py PATH -p --device mps`
+* If running on a GPU: `python AVSyncDetection.py PATH -p --device cuda`
 
 #### General CLI
 
