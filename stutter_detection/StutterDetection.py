@@ -161,7 +161,6 @@ class StutterDetection():
 
     def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=False, plot=False, start_time=0, end_time=0, output_dir='./'):
         time_indexed_audio = time_indexed_audio and start_time != 0 and end_time != 0
-
         if time_indexed_audio:
             audio = []
             for time, chunk in audio_content:
@@ -252,7 +251,6 @@ class StutterDetection():
 
     def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0, epochs=1, output_dir='./'):
         time_indexed_video = time_indexed_video and start_time != 0 and end_time != 0
-
         if time_indexed_video:
             video = []
             for time, frame in video_content:
@@ -401,6 +399,7 @@ if __name__ == '__main__':
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
+
     path = args.input
     out_path = args.output
     frames = args.frames

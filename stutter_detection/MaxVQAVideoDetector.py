@@ -15,7 +15,6 @@ MAXVQA_CONF = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/maxvqa.ym
 MAXVQA_WEIGHTS = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/maxvqa_maxwell.pt")
 DOVER_WEIGHTS = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/DOVER/pretrained_weights/DOVER.pth")
 
-
 # Setup variables & parameters
 dimension_names = [
     "overall quality score",

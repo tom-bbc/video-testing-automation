@@ -7,10 +7,8 @@ from tensorflow.compat.v1 import gfile
 
 from uvq import uvq_utils as utils
 
-
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(ROOT_DIR, "video_quality_assessment/uvq/models/")
-
 
 # Distortion label names
 DISTORTION_TYPES = [
