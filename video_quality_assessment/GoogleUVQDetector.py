@@ -1,4 +1,4 @@
-
+import os
 import numpy as np
 from time import time
 from decord import VideoReader
@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import gfile
 
 from uvq import uvq_utils as utils
+
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(ROOT_DIR, "video_quality_assessment/uvq/models/")
 
 
 # Distortion label names
@@ -23,10 +27,10 @@ DISTORTION_TYPES = [
 
 # Define actual detection module to be used
 class VideoDetector():
-    def __init__(self):
-        self.model_dir = "uvq/models"
-        self.feature_dir = "features"
-        self.output_dir = ''
+    def __init__(self, output_dir='./'):
+        self.model_dir = MODEL_DIR
+        self.output_dir = output_dir
+        self.feature_dir = os.path.join(output_dir, "features/")
 
     def process(self, video_path, plot=True):
         # Get video length
@@ -38,9 +42,6 @@ class VideoDetector():
 
         # Generate video id and output path
         video_id = video_path.split('/')[-1][:-4]
-
-        self.output_dir = f"output/uvq-results/{video_id}"
-        self.feature_dir = f"{self.output_dir}/features"
 
         if not gfile.IsDirectory(self.feature_dir):
             gfile.MakeDirs(self.feature_dir)
@@ -56,17 +57,16 @@ class VideoDetector():
         time_prediction = time() - start
 
         # Output timing info and plot results
-        print(f"\n\nTime (feature generation): {time_features:.2f}s")
-        print(f"Time (prediction): {time_prediction:.2f}s")
-        print(f"Time (total): {time_features + time_prediction:.2f}s")
+        print(f"\nTime (total): {time_features + time_prediction:.2f}s")
 
         if plot:
-            plot_path = f"{self.output_dir}/{video_id}_plot.png"
-            features_dataset_path = f"{self.feature_dir}/{video_id}_label_distortion.csv"
+            plot_path = os.path.join(self.output_dir, f"{video_id}_plot.png")
+            features_dataset_path = os.path.join(self.feature_dir, f"{video_id}_label_distortion.csv")
             label_distortion = np.genfromtxt(features_dataset_path, delimiter=',')
             label_distortion = label_distortion.reshape((label_distortion.shape[0], 4, 26))
 
             self.plot(label_distortion, video_id, plot_path)
+            print(f"Predictions plot generated: {plot_path}")
 
     def plot(self, label_distortion, video_name, plot_name='vqa-plot.png'):
         plt.rcParams.update({'font.size': 20, 'figure.figsize': (30, 25)})

@@ -1,3 +1,4 @@
+import os
 import yaml
 import torch
 import numpy as np
@@ -8,6 +9,11 @@ from ExplainableVQA.DOVER.dover.datasets import UnifiedFrameSampler, get_single_
 from ExplainableVQA.model import TextEncoder, MaxVQA, EnhancedVisualEncoder
 
 torch.cuda.empty_cache()
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MAXVQA_CONF = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/maxvqa.yml")
+MAXVQA_WEIGHTS = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/maxvqa_maxwell.pt")
+DOVER_WEIGHTS = os.path.join(ROOT_DIR, "stutter_detection/ExplainableVQA/DOVER/pretrained_weights/DOVER.pth")
 
 
 # Setup variables & parameters
@@ -54,7 +60,7 @@ def setup_models(text_prompts, opt, aesthetic_clip_len, technical_num_clips, dev
     # Initialize fast-vqa encoder
     fast_vqa_encoder = DOVER(**opt["model"]["args"]).to(device)
     fast_vqa_encoder.load_state_dict(
-        torch.load("ExplainableVQA/DOVER/pretrained_weights/DOVER.pth", map_location=device),
+        torch.load(DOVER_WEIGHTS, map_location=device),
         strict=False
     )
 
@@ -85,7 +91,7 @@ def setup_models(text_prompts, opt, aesthetic_clip_len, technical_num_clips, dev
     # Generate MaxVQA model
     maxvqa = MaxVQA(text_tokens, embedding, text_encoder, share_ctx=True, device=device)
 
-    state_dict = torch.load("ExplainableVQA/maxvqa_maxwell.pt", map_location=device)
+    state_dict = torch.load(MAXVQA_WEIGHTS, map_location=device)
     maxvqa.load_state_dict(state_dict)
     maxvqa.initialize_inference(text_encoder)
 
@@ -149,7 +155,7 @@ class VideoDetector():
         self.load_model()
 
     def load_model(self):
-        with open("ExplainableVQA/maxvqa.yml", "r") as f:
+        with open(MAXVQA_CONF, 'r') as f:
             self.opt = yaml.safe_load(f)
 
         aesthetic_clip_len = self.frames               # length of single fragment for aesthetic analysis

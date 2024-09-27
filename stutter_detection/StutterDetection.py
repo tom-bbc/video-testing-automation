@@ -16,7 +16,7 @@ from itertools import cycle
 from EssentiaAudioDetector import AudioDetector
 from MaxVQAVideoDetector import VideoDetector
 
-Object = lambda **kwargs: type("Object", (), kwargs)
+Object = lambda **kwargs: type('Object', (), kwargs)
 
 
 class StutterDetection():
@@ -29,7 +29,7 @@ class StutterDetection():
         self.audio_segment_index = 0
         self.video_segment_index = 0
 
-    def process(self, directory_path, truth=None, audio_detection=True, video_detection=True, plot=True, time_indexed_files=True, inference_epochs=1):
+    def process(self, directory_path, truth=None, audio_detection=True, video_detection=True, plot=True, time_indexed_files=True, inference_epochs=1, output_directory='./'):
         if os.path.isfile(directory_path):
             # Permits running on single input file
             if directory_path.endswith(".mp4"):
@@ -42,7 +42,7 @@ class StutterDetection():
                 exit(1)
         elif os.path.isdir(directory_path):
             # Gets list of AV files from local directory
-            audio_segment_paths, video_segment_paths = self.get_local_paths(audio_detection, video_detection, dir=directory_path)
+            audio_segment_paths, video_segment_paths = self.get_local_paths(directory_path, audio_detection, video_detection, time_indexed_files)
         else:
             exit(1)
 
@@ -61,12 +61,14 @@ class StutterDetection():
                         audio_segment,
                         plot=plot,
                         start_time=timestamps[0],
-                        end_time=timestamps[-1]
+                        end_time=timestamps[-1],
+                        output_dir=output_directory
                     )
                 else:
                     results = self.audio_detection(
                         audio_segment,
-                        plot=plot
+                        plot=plot,
+                        output_dir=output_directory
                     )
 
                 self.audio_segment_index += 1
@@ -85,14 +87,15 @@ class StutterDetection():
                         plot=plot,
                         start_time=timestamps[0],
                         end_time=timestamps[-1],
-                        epochs=inference_epochs
+                        epochs=inference_epochs,
+                        output_dir=output_directory
                     )
-                    # print(f" * Video detection results: {results.shape}")
                 else:
                     results = self.video_detection(
                         video_segment,
                         plot=plot,
-                        epochs=inference_epochs
+                        epochs=inference_epochs,
+                        output_dir=output_directory
                     )
 
                 # Add local detection results to global results timeline (compensating for segment overlap)
@@ -111,17 +114,20 @@ class StutterDetection():
                 output_file="motion-timeline.png"
             )
 
-    def get_local_paths(self, audio_detection=True, video_detection=True, dir="./data/"):
+    def get_local_paths(self, dir, audio_detection=True, video_detection=True, time_indexed_files=True):
         sort_by_index = lambda path: int(path.split('/')[-1].split('_')[0][3:])
         audio_filenames, video_filenames = [], []
 
         if audio_detection:
-            audio_filenames = glob.glob(f"{dir}*.wav")
-            audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
+            audio_dir = os.path.join(dir, "audio/*.wav")
+            audio_filenames = glob.glob(audio_dir)
+
+            if time_indexed_files: audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
 
         if video_detection:
-            video_filenames = glob.glob(f"{dir}*.mp4")
-            video_filenames = list(sorted(video_filenames, key=sort_by_index))
+            video_dir = os.path.join(dir, "video/*.mp4")
+            video_filenames = glob.glob(video_dir)
+            if time_indexed_files: video_filenames = list(sorted(video_filenames, key=sort_by_index))
 
         return audio_filenames, video_filenames
 
@@ -153,7 +159,9 @@ class StutterDetection():
 
         return video_asset
 
-    def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=True, plot=False, start_time=0, end_time=0):
+    def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=False, plot=False, start_time=0, end_time=0, output_dir='./'):
+        time_indexed_audio = time_indexed_audio and start_time != 0 and end_time != 0
+
         if time_indexed_audio:
             audio = []
             for time, chunk in audio_content:
@@ -172,19 +180,18 @@ class StutterDetection():
         )
 
         print(f"\n * Audio detection (segment {self.audio_segment_index}):")
-        print(f"     * Segment time range         : {start_time.strftime('%H:%M:%S.%f')} => {end_time.strftime('%H:%M:%S.%f')}")
-        print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S'), e.strftime('%H:%M:%S')) for s, e in detected_audio_gaps]}")
-        print(f"     * Detected click times       : {detected_audio_clicks}")
+        if time_indexed_audio: print(f"     * Segment time range         : {start_time.strftime('%H:%M:%S.%f')} => {end_time.strftime('%H:%M:%S.%f')}")
+        if detect_gaps: print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S'), e.strftime('%H:%M:%S')) for s, e in detected_audio_gaps]}")
+        if detect_clicks: print(f"     * Detected click times       : {detected_audio_clicks}")
 
         # Plot audio signal and any detections
         if plot:
-            self.plot_audio(audio, detected_audio_gaps, detected_audio_clicks, start_time, end_time)
-            print(f"     * Plot generated             : 'audio-plot-{self.audio_segment_index}.png'")
+            self.plot_audio(audio, detected_audio_gaps, detected_audio_clicks, start_time, end_time, time_indexed_audio, output_dir)
 
         print()
-        return {"gaps": detected_audio_gaps, "clicks": detected_audio_clicks}
+        return { "gaps": detected_audio_gaps, "clicks": detected_audio_clicks }
 
-    def plot_audio(self, audio_content, gap_times, click_times, startpoint, endpoint, output_file=''):
+    def plot_audio(self, audio_content, gap_times, click_times, startpoint, endpoint, time_indexed_files, output_path):
         # Setup
         plt.rcParams['agg.path.chunksize'] = 1000
         fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
@@ -219,28 +226,33 @@ class StutterDetection():
             line.set_label('Detected click')
 
         axs.set_xticks(time_index[::self.audio_fps])
-        axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]], fontsize=12)
+        if time_indexed_files:
+            axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]], fontsize=12)
+        else:
+            axs.set_xticklabels(time_x[::self.audio_fps], fontsize=12)
+
         plt.yticks(fontsize=12)
 
         plt.xlabel("\nCapture Time (H:M:S)", fontsize=14)
         plt.ylabel("Audio Sample Amplitude", fontsize=14)
-        plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n", fontsize=18)
         plt.legend(loc=1, fontsize=14)
 
-        # Save plot to file
-        output_path = "output/plots/"
-        pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-
-        if output_file == '':
-            output_path = os.path.join(output_path, f"audio-plot-{self.audio_segment_index}.png")
+        if time_indexed_files:
+            plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n", fontsize=18)
         else:
-            output_path = os.path.join(output_path, output_file)
+            plt.title(f"Audio Defect Detection \n", fontsize=18)
+
+        # Save plot to file
+        pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
+        output_path = os.path.join(output_path, f"audio-plot-{self.audio_segment_index}.png")
 
         print(f"     * Audio plot generated : {output_path}")
         fig.savefig(output_path)
         plt.close(fig)
 
-    def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0, epochs=1):
+    def video_detection(self, video_content, time_indexed_video=False, plot=False, start_time=0, end_time=0, epochs=1, output_dir='./'):
+        time_indexed_video = time_indexed_video and start_time != 0 and end_time != 0
+
         if time_indexed_video:
             video = []
             for time, frame in video_content:
@@ -270,12 +282,12 @@ class StutterDetection():
         print(f"     * Processing time    : {processing_time_end:.2f}s")
 
         if plot:
-            self.plot_local_vqa(local_scores, startpoint=start_time, endpoint=end_time)
+            self.plot_local_vqa(local_scores, startpoint=start_time, endpoint=end_time, output_path=output_dir)
 
         print()
         return output
 
-    def plot_local_vqa(self, vqa_values, true_time_labels=None, startpoint=0, endpoint=0, plot_motion_only=True, output_file=''):
+    def plot_local_vqa(self, vqa_values, true_time_labels=None, startpoint=0, endpoint=0, plot_motion_only=True, output_path='./'):
         # Metrics & figure setup
         if plot_motion_only:
             priority_metrics = [14]
@@ -298,14 +310,14 @@ class StutterDetection():
         colours = cycle(mcolors.TABLEAU_COLORS)
 
         # Timestamps
-        plot_with_timestamps = startpoint != 0 and endpoint != 0
-        if plot_with_timestamps:
+        time_indexed_files = startpoint != 0 and endpoint != 0
+        if time_indexed_files:
             time_x = np.linspace(0, 1, len(plot_values[0])) * (endpoint - startpoint) + startpoint
             time_index = np.linspace(0, len(plot_values[0]), len(plot_values[0]))
 
         for value_id, (ax_id, title) in enumerate(titles.items()):
             # Plot true values of known video defect times if they exist
-            if plot_with_timestamps and true_time_labels is not None:
+            if time_indexed_files and true_time_labels is not None:
                 for times in true_time_labels:
                     start = datetime.strptime(times[0], '%H:%M:%S')
                     approx_start = min(time_x, key=lambda dt: abs(dt - start))
@@ -328,14 +340,14 @@ class StutterDetection():
             axes[ax_id].axhline(mean_over_video - 2 * std_over_video, color='black', ls='--', linewidth=0.5, label="Two standard deviations")
 
             # Plot VQA scores themselves
-            if plot_with_timestamps:
+            if time_indexed_files:
                 axes[ax_id].plot(time_index, plot_values[value_id], linewidth=0.75, color=next(colours), label="Score")
             else:
                 axes[ax_id].plot(plot_values[value_id], linewidth=0.75, color=next(colours), label="Score")
 
         # Format title and axes labels
-        if plot_with_timestamps:
-            fig.suptitle(f"MaxVQA Video Defect Detection{f': Segment {self.video_segment_index}' if output_file == '' else ''} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
+        if time_indexed_files:
+            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index}' ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
             num_ticks = round(len(plot_values[0])/10)
             plt.xticks(
@@ -357,13 +369,8 @@ class StutterDetection():
             ax.label_outer()
 
         # Save plot to file
-        output_path = "output/plots/"
         pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-
-        if output_file == '':
-            output_path = os.path.join(output_path, f"motion-plot-{self.video_segment_index}.png")
-        else:
-            output_path = os.path.join(output_path, output_file)
+        output_path = os.path.join(output_path, f"motion-plot-{self.video_segment_index}.png")
 
         print(f"     * Video plot generated : {output_path}")
         fig.savefig(output_path)
@@ -377,19 +384,25 @@ if __name__ == '__main__':
         description='Run audio and video stutter detection algorithms over local AV segments.'
     )
 
-    parser.add_argument("directory")
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    INPUT_DIR = os.path.join(ROOT_DIR, "output/capture/")
+    OUTPUT_DIR = os.path.join(ROOT_DIR, "output/stutter_detection/")
+
+    parser.add_argument('-i', '--input', default=INPUT_DIR)
+    parser.add_argument('-o', '--output', default=OUTPUT_DIR)
     parser.add_argument('-na', '--no-audio', action='store_false', default=True, help="Do not perform stutter detection on the audio track")
     parser.add_argument('-nv', '--no-video', action='store_false', default=True, help="Do not perform stutter detection on the video track")
     parser.add_argument('-c', '--clean-video', action='store_true', default=False, help="Testing on clean stutter-free videos (for experimentation)")
     parser.add_argument('-t', '--true-timestamps', action='store_true', default=False, help="Plot known stutter times on the output graph, specified in 'true-stutter-timestamps.json")
-    parser.add_argument('-i', '--time-indexed-files', action='store_true', default=False, help="Label batch of detections over video segments with their time range (from filename)")
+    parser.add_argument('-x', '--time-indexed-files', action='store_true', default=False, help="Label batch of detections over video segments with their time range (from filename)")
     parser.add_argument('-f', '--frames', type=int, default=256, help="Number of frames to downsample video to")
     parser.add_argument('-e', '--epochs', type=int, default=1, help="Number of times to repeat inference per video")
     parser.add_argument('-d', '--device', type=str, default='cpu', help="Specify processing hardware")
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
-    path = args.directory
+    path = args.input
+    out_path = args.output
     frames = args.frames
     epochs = args.epochs
     device = args.device
@@ -399,6 +412,7 @@ if __name__ == '__main__':
     plot_true_timestamps = args.true_timestamps
     index_by_file_timestamp = args.time_indexed_files
 
+    # Initialise and run Stutter Detection module
     detector = StutterDetection(video_downsample_frames=frames, device=device)
 
     if path.endswith(".mp4") or path.endswith(".wav"):
@@ -407,11 +421,12 @@ if __name__ == '__main__':
             time_indexed_files=index_by_file_timestamp,
             inference_epochs=epochs,
             audio_detection=audio_on,
-            video_detection=video_on
+            video_detection=video_on,
+            output_directory=out_path
         )
     else:
-        if stutter and plot_true_timestamps:
-            timestamps_file = f"{path}/stutter/true-stutter-timestamps.json"
+        if plot_true_timestamps:
+            timestamps_file = f"{path}/true-stutter-timestamps.json"
             if not os.path.isfile(timestamps_file):
                 print(f"Error: no true timestamps file found but 'plot_true_timestamps' enabled. Checked location: {timestamps_file}")
                 exit(1)
@@ -421,20 +436,13 @@ if __name__ == '__main__':
                 true_timestamps_json = json_data["timestamps"]
 
             detector.process(
-                directory_path=f"{path}/stutter/",
+                directory_path=path,
                 truth=true_timestamps_json,
                 time_indexed_files=index_by_file_timestamp,
                 inference_epochs=epochs,
                 audio_detection=audio_on,
-                video_detection=video_on
-            )
-        elif not stutter:
-            detector.process(
-                directory_path=f"{path}/original/",
-                time_indexed_files=index_by_file_timestamp,
-                inference_epochs=epochs,
-                audio_detection=audio_on,
-                video_detection=video_on
+                video_detection=video_on,
+                output_directory=out_path
             )
         else:
             detector.process(
@@ -442,5 +450,6 @@ if __name__ == '__main__':
                 time_indexed_files=index_by_file_timestamp,
                 inference_epochs=epochs,
                 audio_detection=audio_on,
-                video_detection=video_on
+                video_detection=video_on,
+                output_directory=out_path
             )

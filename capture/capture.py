@@ -10,12 +10,6 @@ from AudioVisualProcessor import AudioVisualProcessor
 from AudioVisualStreams import AudioStream, VideoStream, CombinedCaptureStream
 
 
-def signal_handler(sig, frame):
-    print("\nCtrl+C detected. Stopping all AV threads.")
-    if video_on: video.kill()
-    if audio_on and not setup_mode_only: audio.kill()
-
-
 if __name__ == '__main__':
     # Recieve input parameters from CLI
     parser = argparse.ArgumentParser(
@@ -23,13 +17,16 @@ if __name__ == '__main__':
         description='Capture audio and video streams from a camera/microphone and split into segments for processing.'
     )
 
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    OUTPUT_DIR = os.path.join(ROOT_DIR, "output/capture/")
+
     parser.add_argument('-m', '--setup-mode', action='store_true', default=False, help="display video to be captured in setup mode with no capture/processing")
     parser.add_argument('-na', '--no-audio', action='store_false', default=True, help="do not include audio in captured segments")
     parser.add_argument('-nv', '--no-video', action='store_false', default=True, help="do not include video in captured segments")
     parser.add_argument('-s', '--split-av-out', action='store_true', default=False, help="output audio and video in separate files (WAV and MP4)")
     parser.add_argument('-a', '--audio', type=int, default=0, help="index of input audio device")
     parser.add_argument('-v', '--video', type=int, default=0, help="index of input video device")
-    parser.add_argument('-o', '--output-path', type=str, default='output/capture/', help="directory to output captured video segments to")
+    parser.add_argument('-o', '--output-path', type=str, default=OUTPUT_DIR, help="directory to output captured video segments to")
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
     args = parser.parse_args()
@@ -44,6 +41,7 @@ if __name__ == '__main__':
     setup_mode_only = args.setup_mode
     split_audio_video = args.split_av_out or not audio_on or not video_on
 
+    print("PRESS 'CTRL+C' TO STOP CAPTURE")
     print(f"\nAudio devices available: \n{sounddevice.query_devices()}", end='\n\n')
     print(f" * Processes:")
     print(f"     * Audio                      : {audio_on}")
@@ -52,9 +50,6 @@ if __name__ == '__main__':
     print(f"     * Split audio & video tracks : {split_audio_video}",)
     print(f"     * Setup mode (no processing) : {setup_mode_only}", end='\n\n')
     print(f" * Capture setup:")
-
-    # Set up the handler for Ctrl+C interrupt
-    # signal.signal(signal.SIGINT, signal_handler)
 
     # Setup mode
     if setup_mode_only:

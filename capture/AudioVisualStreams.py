@@ -8,7 +8,6 @@ import subprocess
 
 class CombinedCaptureStream():
     def __init__(self, audio_source=0, video_source=0, checkpoint_path=''):
-
         # Check device indices with cmd: `ffmpeg -hide_banner -list_devices true -f avfoundation -i ''`
         self.audio_device = audio_source
         self.video_device = video_source

@@ -7,7 +7,7 @@ class AudioDetector():
         self.gaps = []
         self.clicks = []
 
-    def process(self, audio: np.ndarray, start_time=0, gap_detection=True, click_detection=True):
+    def process(self, audio: np.ndarray, start_time=0, gap_detection=True, click_detection=False):
         # Normalise audio to the range [-1, 1]
         normalised_audio = audio / np.max(np.abs(audio))
         normalised_audio = normalised_audio.astype(np.float32)
