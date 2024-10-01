@@ -50,7 +50,7 @@ class AudioVisualProcessor():
             print(f"         * Segment size           : {self.video_buffer_len_f}")
             print(f"         * Overlap size           : {self.video_overlap_len_f}", end='\n\n')
 
-        print(f"Start of audio-visual processing", end='\n\n')
+        print(f"\nStart of audio-visual processing", end='\n\n')
 
         while (audio_module.stream_open or video_module.stream_open) or \
             (len(audio_frames) > self.audio_buffer_len_f) or \

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-v0_8')
 
 true_offset = 0.0
-plot_mean_pred = True
+plot_mean_pred = False
 plot_mode_pred = True
 time_indexed_files = True
 likelihood_threshold = 0.6
@@ -66,7 +66,7 @@ for video_index, (video_id, prediction) in enumerate(video_detection_results.ite
         max_likelihood_prediction = float(max_likelihood_prediction)
         video_index = float(video_index)
 
-        if max_likelihood > likelihood_threshold:
+        if max_likelihood >= likelihood_threshold:
             confident_predictions.append(max_likelihood_prediction)
 
             weighted_prediction_total += max_likelihood * max_likelihood_prediction
@@ -96,7 +96,7 @@ else:
 
 # True offset value marker
 if true_offset is not None:
-    if plot_mean_pred and (round(weighted_mean_prediction, 2) == round(true_offset, 2) or round(mode_prediction, 2) == round(true_offset, 2)):
+    if (plot_mean_pred or plot_mode_pred) and (round(weighted_mean_prediction, 2) == round(true_offset, 2) or round(mode_prediction, 2) == round(true_offset, 2)):
         plt.axhline(y=true_offset, linestyle='--', c='steelblue', linewidth=4, label=f'True offset ({true_offset:.2f})')
     else:
         plt.axhline(y=true_offset, linestyle='-', c='steelblue', linewidth=4, label=f'True offset ({true_offset:.2f})')
@@ -113,14 +113,8 @@ plt.yticks(fontsize='x-large')
 ax.set_xlabel("Video Segment Index", fontsize='xx-large')
 ax.set_ylabel("Predicted Offset (s)", fontsize='xx-large')
 
-if true_offset is None:
-    ax.set_title(f"Predicted AV Offset per Video Segment\n", fontsize=20)
-elif true_offset == 0:
-    ax.set_title(f"Predicted AV Offset per Video Segment (in sync test clip)\n", fontsize=20)
-elif true_offset < 0:
-    ax.set_title(f"Predicted AV Offset per Video Segment ({true_offset}s offset test clip)\n", fontsize=20)
-elif true_offset > 0:
-    ax.set_title(f"Predicted AV Offset per Video Segment (+{true_offset}s offset test clip)\n", fontsize=20)
+test_clip_name = os.path.basename(input_file).split('.')[0].replace('-', ' ')
+ax.set_title(f"Live Predicted AV Offset per Video Segment (on test clip '{test_clip_name}')\n", fontsize=20)
 
 cbar = fig.colorbar(predictions_plot, ax=ax, orientation='vertical', extend='both', ticks=np.arange(0, 1.1, 0.1), fraction=0.03, pad=0.01)
 cbar.set_label(label='Likelihood', fontsize='xx-large')

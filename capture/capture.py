@@ -73,21 +73,26 @@ if __name__ == '__main__':
 
     # Separate audio & video capture
     else:
-        # Generate segment output locations
-        if save_av_files:
-            audio_save_path = os.path.join(output_path, "audio/")
-            video_save_path = os.path.join(output_path, "video/")
-            Path(audio_save_path).mkdir(parents=True, exist_ok=True)
-            Path(video_save_path).mkdir(parents=True, exist_ok=True)
-
         # Set up and launch separate audio-video stream threads
         if audio_on:
+            # Generate audio output location
+            if save_av_files:
+                audio_save_path = os.path.join(output_path, "audio/")
+                Path(audio_save_path).mkdir(parents=True, exist_ok=True)
+
+            # Launch audio thread
             audio = AudioStream(device=audio_device)
             audio_frame_queue = deque()
             audio_thread = Thread(target=audio.launch, args=(audio_frame_queue,))
             audio_thread.start()
 
         if video_on:
+            # Generate video output location
+            if save_av_files:
+                video_save_path = os.path.join(output_path, "video/")
+                Path(video_save_path).mkdir(parents=True, exist_ok=True)
+
+            # Launch video thread
             video_frame_queue = deque()
             video = VideoStream(device=video_device)
             video_thread = Thread(target=video.launch, args=(video_frame_queue,))
@@ -116,11 +121,10 @@ if __name__ == '__main__':
                 checkpoint_files=save_av_files, audio_on=False
             )
         elif audio_on:
-            processor = AudioVisualProcessor()
+            processor = AudioVisualProcessor(audio_save_path=audio_save_path)
             processor.process(
                 audio_module=audio, audio_frames=audio_frame_queue, audio_channels=1,
-                checkpoint_files=save_av_files, audio_save_path=audio_save_path,
-                video_on=False
+                checkpoint_files=save_av_files, video_on=False
             )
         else:
             exit(0)

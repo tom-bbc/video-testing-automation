@@ -35,6 +35,7 @@ class StutterDetection():
             if directory_path.endswith(".mp4"):
                 video_segment_paths = [directory_path]
                 audio_segment_paths = []
+                print()
             elif directory_path.endswith(".wav"):
                 audio_segment_paths = [directory_path]
                 video_segment_paths = []
@@ -51,15 +52,18 @@ class StutterDetection():
             # Run audio detection
             if audio_detection and index < len(audio_segment_paths):
                 audio_path = audio_segment_paths[index]
+                audio_file_name = os.path.basename(audio_path)
                 audio_segment = self.get_local_audio(audio_path)
-                print(f"New audio segment: {audio_path.split('/')[-1]} {audio_segment.shape}")
+                print(f"New audio segment: {audio_file_name} {audio_segment.shape}")
 
                 if time_indexed_files:
                     timestamps = [datetime.strptime(f, '%H:%M:%S.%f') for f in audio_path.split('/')[-1].replace('.wav', '').split('_')[1:]]
 
                     results = self.audio_detection(
                         audio_segment,
+                        time_indexed_audio=time_indexed_files,
                         plot=plot,
+                        audio_fname=audio_file_name,
                         start_time=timestamps[0],
                         end_time=timestamps[-1],
                         output_dir=output_directory
@@ -67,10 +71,13 @@ class StutterDetection():
                 else:
                     results = self.audio_detection(
                         audio_segment,
+                        time_indexed_audio=time_indexed_files,
                         plot=plot,
+                        audio_fname=audio_file_name,
                         output_dir=output_directory
                     )
 
+                self.audio_detection_results.append(results)
                 self.audio_segment_index += 1
 
             # Run video detection
@@ -103,7 +110,7 @@ class StutterDetection():
                 self.video_segment_index += 1
 
         # If recording timed segments, plot global video detection results over all clips in timeline
-        if time_indexed_files:
+        if time_indexed_files and video_on and len(video_segment_paths) != 0:
             global_start_time = datetime.strptime(video_segment_paths[0].split('/')[-1].replace('.mp4', '').split('_')[1], '%H:%M:%S.%f')
             global_end_time = timestamps[-1]
             print(f"Full timeline: {global_start_time.strftime('%H:%M:%S.%f')} => {global_end_time.strftime('%H:%M:%S.%f')}")
@@ -119,13 +126,20 @@ class StutterDetection():
         audio_filenames, video_filenames = [], []
 
         if audio_detection:
-            audio_dir = os.path.join(dir, "audio/*.wav")
-            audio_filenames = glob.glob(audio_dir)
+            if os.path.basename(os.path.normpath(dir)) == "audio":
+                audio_dir = os.path.join(dir, "*.wav")
+            else:
+                audio_dir = os.path.join(dir, "audio/*.wav")
 
+            audio_filenames = glob.glob(audio_dir)
             if time_indexed_files: audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
 
         if video_detection:
-            video_dir = os.path.join(dir, "video/*.mp4")
+            if os.path.basename(os.path.normpath(dir)) == "video":
+                video_dir = os.path.join(dir, "*.mp4")
+            else:
+                video_dir = os.path.join(dir, "video/*.mp4")
+
             video_filenames = glob.glob(video_dir)
             if time_indexed_files: video_filenames = list(sorted(video_filenames, key=sort_by_index))
 
@@ -159,45 +173,56 @@ class StutterDetection():
 
         return video_asset
 
-    def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_clicks=False, plot=False, start_time=0, end_time=0, output_dir='./'):
+    def audio_detection(self, audio_content, time_indexed_audio=False, detect_gaps=True, detect_discontinuities=True, detect_clicks=False, plot=False, audio_fname='', start_time=0, end_time=0, output_dir='./'):
         time_indexed_audio = time_indexed_audio and start_time != 0 and end_time != 0
-        if time_indexed_audio:
-            audio = []
-            for time, chunk in audio_content:
-                audio = np.append(audio, chunk, axis=1)
 
-            start_time = audio_content[0][0]
-            end_time = audio_content[-1][0]
-        else:
-            audio = audio_content
-
-        detected_audio_gaps, detected_audio_clicks = self.audio_detector.process(
-            audio,
+        audio_results = self.audio_detector.process(
+            audio_content,
             start_time=start_time,
             gap_detection=detect_gaps,
+            discontinuity_detection=detect_discontinuities,
             click_detection=detect_clicks
         )
 
+        detected_audio_gaps = audio_results['gaps']
+        detected_audio_discontinuities = audio_results['discontinuities']
+        detected_audio_clicks = audio_results['clicks']
+
         print(f"\n * Audio detection (segment {self.audio_segment_index}):")
         if time_indexed_audio: print(f"     * Segment time range         : {start_time.strftime('%H:%M:%S.%f')} => {end_time.strftime('%H:%M:%S.%f')}")
-        if detect_gaps: print(f"     * Detected gap times         : {[(s.strftime('%H:%M:%S'), e.strftime('%H:%M:%S')) for s, e in detected_audio_gaps]}")
-        if detect_clicks: print(f"     * Detected click times       : {detected_audio_clicks}")
+        if detect_gaps:
+            if time_indexed_audio:
+                print(f"     * Detected gap times: {[(s.strftime('%H:%M:%S'), e.strftime('%H:%M:%S')) for s, e in detected_audio_gaps]}")
+            else:
+                print(f"     * Detected gap times: {detected_audio_gaps}")
+
+        if detect_clicks: print(f"     * Detected click times: {detected_audio_clicks}")
+        if detect_discontinuities: print(f"     * Detected discontinuity times: {detected_audio_discontinuities}")
 
         # Plot audio signal and any detections
         if plot:
-            self.plot_audio(audio, detected_audio_gaps, detected_audio_clicks, start_time, end_time, time_indexed_audio, output_dir)
+            self.plot_audio(audio_content, detected_audio_gaps, detected_audio_clicks, start_time, end_time, time_indexed_audio, output_dir, audio_fname)
 
         print()
-        return { "gaps": detected_audio_gaps, "clicks": detected_audio_clicks }
+        return {
+            "gaps": detected_audio_gaps,
+            "discontinuities": detected_audio_discontinuities,
+            "clicks": detected_audio_clicks
+        }
 
-    def plot_audio(self, audio_content, gap_times, click_times, startpoint, endpoint, time_indexed_files, output_path):
+    def plot_audio(self, audio_content, gap_times, click_times, startpoint, endpoint, time_indexed_files, output_path, audio_name):
         # Setup
         plt.rcParams['agg.path.chunksize'] = 1000
         fig, axs = plt.subplots(1, figsize=(20, 10), tight_layout=True)
 
         # Form timeline over clip
-        time_x = np.linspace(0, 1, len(audio_content[0])) * (endpoint - startpoint) + startpoint
         time_index = np.linspace(0, len(audio_content[0]), len(audio_content[0]))
+
+        if time_indexed_files and startpoint != 0 and endpoint != 0:
+            time_x = np.linspace(0, 1, len(audio_content[0])) * (endpoint - startpoint) + startpoint
+        else:
+            n_secs = len(audio_content[0]) / self.audio_fps
+            time_x = np.linspace(0, n_secs, len(audio_content[0]))
 
         # Plot L/R/Mono channels
         for idx, audio_channel in enumerate(audio_content):
@@ -226,20 +251,26 @@ class StutterDetection():
 
         axs.set_xticks(time_index[::self.audio_fps])
         if time_indexed_files:
-            axs.set_xticklabels([t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]], fontsize=12)
+            times = [t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]]
+            axs.set_xticklabels(times, fontsize=12)
         else:
-            axs.set_xticklabels(time_x[::self.audio_fps], fontsize=12)
+            axs.set_xticklabels([round(t, 4) for t in time_x[::self.audio_fps]], fontsize=12)
 
         plt.yticks(fontsize=12)
 
-        plt.xlabel("\nCapture Time (H:M:S)", fontsize=14)
         plt.ylabel("Audio Sample Amplitude", fontsize=14)
         plt.legend(loc=1, fontsize=14)
 
         if time_indexed_files:
+            plt.xlabel("\nCapture Time (H:M:S)", fontsize=14)
             plt.title(f"Audio Defect Detection: Segment {self.audio_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})) \n", fontsize=18)
         else:
-            plt.title(f"Audio Defect Detection \n", fontsize=18)
+            plt.xlabel("\nCapture Time (s)", fontsize=14)
+
+            if audio_name == '':
+                plt.title(f"Audio Defect Detection \n", fontsize=18)
+            else:
+                plt.title(f"Audio Defect Detection: {audio_name}\n", fontsize=18)
 
         # Save plot to file
         pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)

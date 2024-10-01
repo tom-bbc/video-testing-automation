@@ -1,4 +1,4 @@
-from essentia.standard import FrameGenerator, GapsDetector, ClickDetector
+from essentia.standard import FrameGenerator, GapsDetector, ClickDetector, DiscontinuityDetector
 import numpy as np
 import datetime
 
@@ -7,21 +7,29 @@ class AudioDetector():
         self.gaps = []
         self.clicks = []
 
-    def process(self, audio: np.ndarray, start_time=0, gap_detection=True, click_detection=False):
+    def process(self, audio: np.ndarray, start_time=0, gap_detection=True, discontinuity_detection=True, click_detection=False):
         # Normalise audio to the range [-1, 1]
         normalised_audio = audio / np.max(np.abs(audio))
         normalised_audio = normalised_audio.astype(np.float32)
-        gaps, clicks = [], []
+        gaps, clicks, discontinuities = [], [], []
 
         if gap_detection:
             gaps = self.audio_gap_detection(normalised_audio, start_time)
             self.gaps.extend(gaps)
 
+        if discontinuity_detection:
+            discontinuities = self.audio_discontinuity_detection(normalised_audio, start_time)
+            self.clicks.extend(discontinuities)
+
         if click_detection:
             clicks = self.audio_click_detection(normalised_audio, start_time)
             self.clicks.extend(clicks)
 
-        return gaps, clicks
+        return {
+            'gaps': gaps,
+            'discontinuities': discontinuities,
+            'clicks': clicks
+        }
 
     @staticmethod
     def audio_gap_detection(audio_values, start_time=0):
@@ -61,6 +69,40 @@ class AudioDetector():
                 ))
             else:
                 output.append((start, end))
+
+        return output
+
+    @staticmethod
+    def audio_discontinuity_detection(audio_values, start_time=0):
+        """Detection of discontinuities in the audio signal"""
+        # Parameters
+        frame_size = 512          # frame size used for the analysis
+        hop_size = 256            # hop size used for the analysis
+        detection_threshold = 8   # threshold is T * s.d. + median
+        energy_threshold = -60    # detect silent subframes [dB]
+        silence_threshold = -50   # skip silent frames [dB]
+
+        # Detection process
+        detected_discontinuities = []
+        discontinuityDetector = DiscontinuityDetector(
+            detectionThreshold=detection_threshold,
+            energyThreshold=energy_threshold, silenceThreshold=silence_threshold,
+            frameSize=frame_size, hopSize=hop_size
+        )
+
+        for audio_channel in audio_values:
+            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+                discont_starts, discont_amplitudes = discontinuityDetector(frame)
+                detected_discontinuities.extend(discont_starts)
+
+            discontinuityDetector.reset()
+
+        detected_discontinuities = np.unique(np.round(detected_discontinuities, decimals=2))
+        output = []
+
+        if start_time != 0:
+            for discontinuity in detected_discontinuities:
+                output.append(start_time + datetime.timedelta(seconds=float(discontinuity)))
 
         return output
 
