@@ -273,7 +273,6 @@ class StutterDetection():
                 plt.title(f"Audio Defect Detection: {audio_name}\n", fontsize=18)
 
         # Save plot to file
-        pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(output_path, f"audio-plot-{self.audio_segment_index}.png")
 
         print(f"     * Audio plot generated : {output_path}")
@@ -398,7 +397,6 @@ class StutterDetection():
             ax.label_outer()
 
         # Save plot to file
-        pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(output_path, f"motion-plot-{self.video_segment_index}.png")
 
         print(f"     * Video plot generated : {output_path}")
@@ -416,6 +414,7 @@ if __name__ == '__main__':
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     INPUT_DIR = os.path.join(ROOT_DIR, "output/capture/")
     OUTPUT_DIR = os.path.join(ROOT_DIR, "output/stutter_detection/")
+    pathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     parser.add_argument('-i', '--input', default=INPUT_DIR)
     parser.add_argument('-o', '--output', default=OUTPUT_DIR)

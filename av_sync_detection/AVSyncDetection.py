@@ -5,6 +5,7 @@ import glob
 import json
 import torch
 import pathlib
+import warnings
 import argparse
 import numpy as np
 import torchvision
@@ -61,18 +62,18 @@ class AVSyncDetection():
 
         self.likelihood_threshold = 0.40
 
-    def process(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
+    def process(self, input_directory, time_indexed_files=False, output_to_file=True, plot=True, output_directory='./'):
         # Setup
-        if os.path.isfile(directory_path):
+        if os.path.isfile(input_directory):
             # Permits running on single input file
-            if directory_path.endswith(".mp4"):
-                segment_paths = [directory_path]
-                directory_path = os.path.dirname(directory_path)
+            if input_directory.endswith(".mp4"):
+                segment_paths = [input_directory]
+                input_directory = os.path.dirname(input_directory)
             else:
                 exit(1)
-        elif os.path.isdir(directory_path):
+        elif os.path.isdir(input_directory):
             # Gets list of AV files from local directory
-            segment_paths = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+            segment_paths = self.get_local_paths(dir=input_directory, time_indexed_files=time_indexed_files)
         else:
             exit(1)
 
@@ -89,20 +90,20 @@ class AVSyncDetection():
             # Add local detection results to global results timeline (compensating for segment overlap)
             self.video_segment_index += 1
 
-            if plot: self.plot(directory_path, time_indexed_files)
+            if plot: self.plot(output_directory, time_indexed_files)
 
-        if output_to_file: self.write_results_file(directory_path)
+        if output_to_file: self.write_results_file(output_directory)
 
-    def continuous_processing(self, directory_path, time_indexed_files=False, output_to_file=True, plot=True):
+    def continuous_processing(self, input_directory, time_indexed_files=False, output_to_file=True, plot=True, output_directory='./'):
         # Only allow continuous processing on directories
-        if not os.path.isdir(directory_path):
+        if not os.path.isdir(input_directory):
             exit(1)
 
         # Load the Syncformer model from checkpoint
         self.load_model()
 
         # Gets list of AV files from local directory
-        segment_file_paths = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+        segment_file_paths = self.get_local_paths(dir=input_directory, time_indexed_files=time_indexed_files)
         processed_files = []
         print(f"New files found: {segment_file_paths}")
 
@@ -118,13 +119,13 @@ class AVSyncDetection():
                 self.video_detection_results.update({video_id: predictions})
                 processed_files.append(video_path)
 
-                if plot: self.plot(directory_path, time_indexed_files)
+                if plot: self.plot(output_directory, time_indexed_files)
 
             if len(segment_file_paths) > 1:
                 segment_file_paths = segment_file_paths[1:]
             else:
                 print("\nChecking for new files.")
-                new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                new_files = self.get_local_paths(dir=input_directory, time_indexed_files=time_indexed_files)
                 segment_file_paths = [f for f in new_files if f not in processed_files]
 
                 if len(segment_file_paths) == 0:
@@ -137,7 +138,7 @@ class AVSyncDetection():
                         retry_attempt += 1
                         time.sleep(self.retry_wait_time)
 
-                        new_files = self.get_local_paths(dir=directory_path, time_indexed_files=time_indexed_files)
+                        new_files = self.get_local_paths(dir=input_directory, time_indexed_files=time_indexed_files)
                         segment_file_paths = [f for f in new_files if f not in processed_files]
 
                     if len(segment_file_paths) == 0:
@@ -146,7 +147,7 @@ class AVSyncDetection():
 
                 print(f"New files found: {segment_file_paths}")
 
-        if output_to_file: self.write_results_file(directory_path)
+        if output_to_file: self.write_results_file(output_directory)
 
     def get_local_paths(self, dir, time_indexed_files=False):
         video_filenames = glob.glob(f"{dir}*.mp4")
@@ -365,10 +366,12 @@ if __name__ == '__main__':
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     INPUT_DIR = os.path.join(ROOT_DIR, "output/capture/segments/")
-    print(INPUT_DIR)
+    OUTPUT_DIR = os.path.join(ROOT_DIR, "output/av_sync_detection/")
+    pathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     # Decode input parameters
     parser.add_argument('-i', '--input', default=INPUT_DIR)
+    parser.add_argument('-o', '--output', default=OUTPUT_DIR)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help="plot sync predictions as generated by model")
     parser.add_argument('-f', '--output-file', action='store_true', default=False, help="store sync predictions in json output file")
     parser.add_argument('-s', '--streaming', action='store_true', default=False, help="real-time detection of streamed input by continuously locating & processing video segments")
@@ -377,6 +380,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--true-offset', default=None, help="known true av offset of the input video")
 
     args = parser.parse_args()
+    warnings.filterwarnings("ignore")
 
     # Initialise and run AV sync model
     detector = AVSyncDetection(args.device, args.true_offset)
@@ -386,12 +390,14 @@ if __name__ == '__main__':
             args.input,
             time_indexed_files=args.time_indexed_files,
             output_to_file=args.output_file,
-            plot=args.plot
+            plot=args.plot,
+            output_directory=args.output
         )
     else:
         detector.process(
             args.input,
             time_indexed_files=args.time_indexed_files,
             output_to_file=args.output_file,
-            plot=args.plot
+            plot=args.plot,
+            output_directory=args.output
         )
