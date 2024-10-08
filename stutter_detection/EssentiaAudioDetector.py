@@ -1,6 +1,7 @@
 from essentia.standard import FrameGenerator, GapsDetector, ClickDetector, DiscontinuityDetector
 import numpy as np
 import datetime
+from tqdm import tqdm
 
 class AudioDetector():
     def __init__(self):
@@ -49,7 +50,7 @@ class AudioDetector():
         )
 
         for audio_channel in audio_values:
-            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+            for frame in tqdm(FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True)):
                 frame_starts, frame_ends = gapDetector(frame)
                 detected_gap_starts.extend(frame_starts)
                 detected_gap_ends.extend(frame_ends)
@@ -91,7 +92,7 @@ class AudioDetector():
         )
 
         for audio_channel in audio_values:
-            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+            for frame in tqdm(FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True)):
                 discont_starts, discont_amplitudes = discontinuityDetector(frame)
                 detected_discontinuities.extend(discont_starts)
 
@@ -118,7 +119,7 @@ class AudioDetector():
         clickDetector = ClickDetector(frameSize=frame_size, hopSize=hop_size)
 
         for audio_channel in audio_values:
-            for frame in FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True):
+            for frame in tqdm(FrameGenerator(audio_channel, frameSize=frame_size, hopSize=hop_size, startFromZero=True)):
                 frame_starts, frame_ends = clickDetector(frame)
                 detected_clicks.extend(np.mean([frame_starts, frame_ends], axis=0))
 

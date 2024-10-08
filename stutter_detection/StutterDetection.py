@@ -4,6 +4,7 @@ import json
 import math
 import glob
 import pathlib
+import warnings
 import argparse
 import numpy as np
 from scipy.io import wavfile
@@ -34,8 +35,8 @@ class StutterDetection():
             # Permits running on single input file
             if directory_path.endswith(".mp4"):
                 video_segment_paths = [directory_path]
-                audio_segment_paths = []
-                print()
+                audio_segment_paths = [directory_path]
+
             elif directory_path.endswith(".wav"):
                 audio_segment_paths = [directory_path]
                 video_segment_paths = []
@@ -117,7 +118,9 @@ class StutterDetection():
             self.plot_local_vqa(
                 self.video_detection_results,
                 true_time_labels=truth,
-                startpoint=global_start_time, endpoint=global_end_time,
+                startpoint=global_start_time,
+                endpoint=global_end_time,
+                output_path=output_directory,
                 output_file="motion-timeline.png"
             )
 
@@ -132,6 +135,15 @@ class StutterDetection():
                 audio_dir = os.path.join(dir, "audio/*.wav")
 
             audio_filenames = glob.glob(audio_dir)
+
+            if len(audio_filenames) == 0:
+                audio_dir = os.path.join(dir, "*.wav")
+                audio_filenames = glob.glob(audio_dir)
+
+            if len(audio_filenames) == 0:
+                audio_dir = os.path.join(dir, "*.mp4")
+                audio_filenames = glob.glob(audio_dir)
+
             if time_indexed_files: audio_filenames = list(sorted(audio_filenames, key=sort_by_index))
 
         if video_detection:
@@ -141,6 +153,11 @@ class StutterDetection():
                 video_dir = os.path.join(dir, "video/*.mp4")
 
             video_filenames = glob.glob(video_dir)
+
+            if len(video_filenames) == 0:
+                video_dir = os.path.join(dir, "*.mp4")
+                video_filenames = glob.glob(video_dir)
+
             if time_indexed_files: video_filenames = list(sorted(video_filenames, key=sort_by_index))
 
         return audio_filenames, video_filenames
@@ -252,9 +269,9 @@ class StutterDetection():
         axs.set_xticks(time_index[::self.audio_fps])
         if time_indexed_files:
             times = [t.strftime('%H:%M:%S') for t in time_x[::self.audio_fps]]
-            axs.set_xticklabels(times, fontsize=12)
+            axs.set_xticklabels(times, fontsize=12, rotation=90)
         else:
-            axs.set_xticklabels([round(t, 4) for t in time_x[::self.audio_fps]], fontsize=12)
+            axs.set_xticklabels([round(t) for t in time_x[::self.audio_fps]], fontsize=12, rotation=90)
 
         plt.yticks(fontsize=12)
 
@@ -268,9 +285,9 @@ class StutterDetection():
             plt.xlabel("\nCapture Time (s)", fontsize=14)
 
             if audio_name == '':
-                plt.title(f"Audio Defect Detection \n", fontsize=18)
+                plt.title(f"Essentia Audio Defect Detection \n", fontsize=18)
             else:
-                plt.title(f"Audio Defect Detection: {audio_name}\n", fontsize=18)
+                plt.title(f"Essentia Audio Defect Detection: {audio_name}\n", fontsize=18)
 
         # Save plot to file
         output_path = os.path.join(output_path, f"audio-plot-{self.audio_segment_index}.png")
@@ -315,7 +332,7 @@ class StutterDetection():
         print()
         return output
 
-    def plot_local_vqa(self, vqa_values, true_time_labels=None, startpoint=0, endpoint=0, plot_motion_only=True, output_path='./'):
+    def plot_local_vqa(self, vqa_values, true_time_labels=None, startpoint=0, endpoint=0, plot_motion_only=True, output_path='./', output_file=''):
         # Metrics & figure setup
         if plot_motion_only:
             priority_metrics = [14]
@@ -375,7 +392,7 @@ class StutterDetection():
 
         # Format title and axes labels
         if time_indexed_files:
-            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index}' ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
+            fig.suptitle(f"MaxVQA Video Defect Detection: Segment {self.video_segment_index} ({time_x[0].strftime('%H:%M:%S')} => {time_x[-1].strftime('%H:%M:%S')})", fontsize=16)
             fig.supxlabel("Capture Time (H:M:S)")
             num_ticks = round(len(plot_values[0])/10)
             plt.xticks(
@@ -397,7 +414,10 @@ class StutterDetection():
             ax.label_outer()
 
         # Save plot to file
-        output_path = os.path.join(output_path, f"motion-plot-{self.video_segment_index}.png")
+        if output_file == '':
+            output_path = os.path.join(output_path, f"motion-plot-{self.video_segment_index}.png")
+        else:
+            output_path = os.path.join(output_path, output_file)
 
         print(f"     * Video plot generated : {output_path}")
         fig.savefig(output_path)
@@ -428,6 +448,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--device', type=str, default='cpu', help="Specify processing hardware")
 
     # Decode input parameters to toggle between cameras, microphones, and setup mode.
+    warnings.filterwarnings("ignore")
     args = parser.parse_args()
 
     path = args.input
